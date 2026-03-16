@@ -54,6 +54,8 @@ object BleStore {
     var soundOnTracker = false
     var trackerSeenThisSession = false
     var lastTrackerNotifyMs = 0L
+    var lastPacketSeenMs = 0L
+    var lastScanRestartMs = 0L
 }
 
 fun classifyDevice(d: BleSeenDevice): String {
@@ -118,6 +120,21 @@ class MainActivity : Activity() {
                 uiDirty = false
             }
             uiHandler.postDelayed(this, 450)
+        }
+    }
+
+    private val scanWatchdogRunnable = object : Runnable {
+        override fun run() {
+            if (isScannerActive && BleStore.shouldScan) {
+                val now = System.currentTimeMillis()
+                val staleFor = now - BleStore.lastPacketSeenMs
+                val restartedAgo = now - BleStore.lastScanRestartMs
+
+                if (BleStore.lastPacketSeenMs > 0L && staleFor > 12000L && restartedAgo > 5000L) {
+                    restartScanSession("watchdog")
+                }
+            }
+            uiHandler.postDelayed(this, 4000)
         }
     }
 
@@ -277,6 +294,7 @@ class MainActivity : Activity() {
         }
 
         uiHandler.post(uiRefreshRunnable)
+        uiHandler.post(scanWatchdogRunnable)
         updateButtonStates()
     }
 
@@ -289,6 +307,7 @@ class MainActivity : Activity() {
         BleStore.shouldScan = isScannerActive
         super.onDestroy()
         uiHandler.removeCallbacks(uiRefreshRunnable)
+        uiHandler.removeCallbacks(scanWatchdogRunnable)
         hardStopScanner()
         toneGenerator?.release()
         toneGenerator = null
@@ -409,6 +428,32 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun restartScanSession(reason: String) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        try {
+            scanner?.stopScan(scanCallback)
+        } catch (_: Exception) {
+        }
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        try {
+            scanner?.startScan(null, settings, scanCallback)
+            isScannerActive = true
+            BleStore.shouldScan = true
+            BleStore.lastScanRestartMs = System.currentTimeMillis()
+            statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
+        } catch (_: Exception) {
+        }
+
+        updateButtonStates()
+    }
+
     private fun initBle() {
         val adapter = BluetoothAdapter.getDefaultAdapter()
         if (adapter == null) {
@@ -433,6 +478,8 @@ class MainActivity : Activity() {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
                 scanner?.startScan(null, settings, scanCallback)
                 isScannerActive = true
+                BleStore.lastScanRestartMs = System.currentTimeMillis()
+                BleStore.lastPacketSeenMs = System.currentTimeMillis()
             }
         }
 
@@ -463,6 +510,8 @@ class MainActivity : Activity() {
         scanner?.startScan(null, settings, scanCallback)
         isScannerActive = true
         BleStore.shouldScan = true
+        BleStore.lastScanRestartMs = System.currentTimeMillis()
+        BleStore.lastPacketSeenMs = System.currentTimeMillis()
         statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
         updateButtonStates()
     }
@@ -486,6 +535,7 @@ class MainActivity : Activity() {
             scanner?.stopScan(scanCallback)
         }
         isScannerActive = false
+        BleStore.lastPacketSeenMs = 0L
         updateButtonStates()
     }
 
@@ -502,6 +552,7 @@ class MainActivity : Activity() {
             val addr = result.device.address ?: "Unknown"
             val rssi = result.rssi
             val now = System.currentTimeMillis()
+            BleStore.lastPacketSeenMs = now
 
             val manufacturerText = detectManufacturer(record)
             val manufacturerDataText = formatManufacturerData(record)
