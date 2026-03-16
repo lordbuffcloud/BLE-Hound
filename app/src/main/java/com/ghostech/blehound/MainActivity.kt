@@ -89,12 +89,55 @@ fun classifyDevice(d: BleSeenDevice): String {
     if ("GOOGL" in mfg || "GOOGLE" in mfg) return "Google BLE"
     if ("MSFT" in mfg) return "Microsoft BLE"
     if ("SAMSNG" in mfg) return "Samsung BLE"
+
+    // --- nyanBOX Ported BLE Identifiers ---
+    val macPrefix = d.address.take(8).lowercase()
+
+    // Flipper Zero
+    if (macPrefix == "80:e1:26" || macPrefix == "80:e1:27" || macPrefix == "0c:fa:22" ||
+        "3081" in svc || "3082" in svc || "3083" in svc || "3080" in svc || "FLIPPER" in name) {
+        return "Flipper Zero"
+    }
+
+    // Pwnagotchi
+    if ("PWNAGOTCHI" in name || macPrefix == "de:ad:be") {
+        return "Pwnagotchi"
+    }
+
+    // Card Skimmer
+    if ("HC-03" in name || "HC-05" in name || "HC-06" in name) {
+        return "Card Skimmer"
+    }
+
+    // Drone (Remote ID / known manufacturers)
+    if ("DJI" in name || "PARROT" in name || "SKYDIO" in name || "AUTEL" in name || "FFFA" in svc) {
+        return "Drone"
+    }
+
+    // Axon (law enforcement body cameras)
+    if (macPrefix == "00:25:df" || "AXON" in name) {
+        return "Axon"
+    }
+
+    // Flock / ALPR systems
+    val flockPrefixes = listOf(
+        "58:8e:81", "cc:cc:cc", "ec:1b:bd", "90:35:ea", "04:0d:84",
+        "f0:82:c0", "1c:34:f1", "38:5b:44", "94:34:69", "b4:e3:f9",
+        "70:c9:4e", "3c:91:80", "d8:f3:bc", "80:30:49", "14:5a:fc",
+        "74:4c:a1", "08:3a:88", "9c:2f:9d", "94:08:53", "e4:aa:ea"
+    )
+    if ("FS EXT BATTERY" in name || "PENGUIN" in name || "FLOCK" in name || "PIGVISION" in name || flockPrefixes.contains(macPrefix)) {
+        return "Flock"
+    }
+    // --- End nyanBOX Ported Logic ---
+
     if (svc != "-" && svc.isNotBlank()) return "BLE Device"
 
     return "-"
 }
 
 class MainActivity : Activity() {
+    fun getAnimationTick(): Int = animationTick
 
     private lateinit var statusView: TextView
     private lateinit var trackerLegendView: TextView
@@ -119,6 +162,8 @@ class MainActivity : Activity() {
                 renderDeviceList()
                 uiDirty = false
             }
+            animationTick = (animationTick + 1) % 2
+            if (!BleStore.isListFrozen) adapter.notifyDataSetChanged()
             uiHandler.postDelayed(this, 450)
         }
     }
@@ -182,11 +227,10 @@ class MainActivity : Activity() {
         }
 
         trackerLegendView = TextView(this).apply {
-            text = "[ TRACKER ] = tracker detected"
+            text = buildLegendText()
             gravity = Gravity.CENTER
             textSize = 10f
             typeface = Typeface.MONOSPACE
-            setTextColor(0xFFFFFF66.toInt())
             setPadding(0, 0, 0, dp(10))
         }
 
@@ -249,23 +293,17 @@ class MainActivity : Activity() {
         headerPanel.addView(trackerLegendView)
         headerPanel.addView(buttonBar)
 
-        val tableHeader = buildTableHeader()
+        adapter = DeviceListAdapter(this) { device -> openDetail(device.address) }
 
         listView = ListView(this).apply {
-            divider = null
-            cacheColorHint = 0
             setBackgroundColor(0xFF000000.toInt())
-            isVerticalScrollBarEnabled = true
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-        }
-
-        adapter = DeviceListAdapter(this) { device ->
-            openDetail(device.address)
+            divider = null
+            dividerHeight = 0
         }
         listView.adapter = adapter
 
         root.addView(headerPanel)
-        root.addView(tableHeader)
+        root.addView(buildTableHeader())
         root.addView(
             listView,
             LinearLayout.LayoutParams(
@@ -277,8 +315,7 @@ class MainActivity : Activity() {
 
         setContentView(root)
 
-        if (
-            ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {
             ActivityCompat.requestPermissions(
@@ -352,6 +389,42 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun buildLegendText(): android.text.SpannableStringBuilder {
+        val sb = android.text.SpannableStringBuilder()
+
+        fun addPart(text: String, color: Int) {
+            val start = sb.length
+            sb.append(text)
+            sb.setSpan(
+                android.text.style.ForegroundColorSpan(color),
+                start,
+                sb.length,
+                android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+
+        addPart("[ TRACKER ]", 0xFFFFFF00.toInt())
+        addPart("=", 0xFFFFFFFF.toInt())
+        addPart("Yellow", 0xFFFFFF00.toInt())
+        addPart("  ", 0xFFFFFFFF.toInt())
+
+        addPart("[ GADGET ]", 0xFFFF8800.toInt())
+        addPart("=", 0xFFFFFFFF.toInt())
+        addPart("Orange", 0xFFFF8800.toInt())
+        sb.append("\n")
+
+        addPart("[ DRONE ]", 0xFFFF0000.toInt())
+        addPart("=", 0xFFFFFFFF.toInt())
+        addPart("Flash Red", 0xFFFF0000.toInt())
+        addPart("  ", 0xFFFFFFFF.toInt())
+
+        addPart("[ FEDERAL ]", 0xFF3F7BFF.toInt())
+        addPart("=", 0xFFFFFFFF.toInt())
+        addPart("Flash Red/Blue", 0xFF3F7BFF.toInt())
+
+        return sb
+    }
+
     private fun buildHeaderCell(text: String, weight: Float): TextView {
         return TextView(this).apply {
             this.text = text
@@ -369,6 +442,20 @@ class MainActivity : Activity() {
     private fun setHellButtonState(button: Button, enabledState: Boolean) {
         button.isEnabled = enabledState
         button.alpha = if (enabledState) 1.0f else 0.38f
+    }
+
+    private var animationTick = 0
+
+    private fun isCyberGadgetClass(classText: String): Boolean {
+        return classText == "Flipper Zero" || classText == "Pwnagotchi" || classText == "Card Skimmer" || classText == "Dev Board"
+    }
+
+    private fun isDroneClass(classText: String): Boolean {
+        return classText == "Drone"
+    }
+
+    private fun isPoliceClass(classText: String): Boolean {
+        return classText == "Axon" || classText == "Flock"
     }
 
     private fun isTrackerClass(classText: String): Boolean {
@@ -602,9 +689,7 @@ class MainActivity : Activity() {
         )
 
         statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
-        trackerLegendView.text =
-            if (BleStore.trackerSeenThisSession) "[ TRACKER ] = tracker detected"
-            else "[ TRACKER ] = no tracker seen yet"
+        trackerLegendView.text = buildLegendText()
 
         adapter.replaceData(sorted.take(250))
         updateButtonStates()
@@ -728,6 +813,11 @@ class DeviceListAdapter(
             classText == "Galaxy Tag" ||
             classText == "Find My"
 
+        val isCyberGadget = classText == "Flipper Zero" || classText == "Pwnagotchi" || classText == "Card Skimmer" || classText == "Dev Board"
+        val isDrone = classText == "Drone"
+        val isPolice = classText == "Axon" || classText == "Flock"
+        val tick = (activity as? MainActivity)?.getAnimationTick() ?: 0
+
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(8), 0, dp(8), 0)
@@ -736,6 +826,12 @@ class DeviceListAdapter(
                 setColor(rowBg)
                 if (isTrackerRow) {
                     setStroke(dp(2), 0xFFFFFF00.toInt())
+                } else if (isCyberGadget) {
+                    setStroke(dp(2), 0xFFFF8800.toInt())
+                } else if (isDrone) {
+                    if (tick == 0) setStroke(dp(2), 0xFFFF0000.toInt()) else setStroke(dp(2), 0xFF440000.toInt())
+                } else if (isPolice) {
+                    if (tick == 0) setStroke(dp(2), 0xFFFF0000.toInt()) else setStroke(dp(2), 0xFF0000FF.toInt())
                 }
             }
         }
@@ -765,12 +861,27 @@ class DeviceListAdapter(
             classText == "Galaxy Tag" ||
             classText == "Find My"
 
-        val classView = if (isTrackerClass) {
+        val classView = if (isTrackerClass || isCyberGadget || isDrone || isPolice) {
+            val bracketText = when {
+                isTrackerClass -> "[ TRACKER ]"
+                isCyberGadget -> "[ GADGET ]"
+                isDrone -> "[ DRONE ]"
+                isPolice -> "[ FEDERAL ]"
+                else -> classText
+            }
+            val textColor = when {
+                isTrackerClass -> 0xFFFF8800.toInt()
+                isCyberGadget -> 0xFFFF8800.toInt()
+                isDrone -> if (tick == 0) 0xFFFF0000.toInt() else 0xFF880000.toInt()
+                isPolice -> if (tick == 0) 0xFFFF0000.toInt() else 0xFF0000FF.toInt()
+                else -> 0xFFFFFFFF.toInt()
+            }
+
             OutlinedTextView(activity).apply {
-                text = classText
+                text = bracketText
                 typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 textSize = 11f
-                setTextColor(0xFFFF8800.toInt())
+                setTextColor(textColor)
                 strokeColor = 0xFF000000.toInt()
                 strokeWidthPx = dp(1).toFloat() + 1f
                 setPadding(dp(4), dp(8), dp(4), dp(8))
@@ -786,16 +897,14 @@ class DeviceListAdapter(
         topRow.addView(classView)
 
         val nameBox = TextView(activity).apply {
-            
-text = android.text.SpannableString("NAME: " + clippedName).apply {
-    setSpan(
-        android.text.style.ForegroundColorSpan(0xFF80FF80.toInt()),
-        0,
-        5,
-        android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-    )
-}
-
+            text = android.text.SpannableString("NAME: " + clippedName).apply {
+                setSpan(
+                    android.text.style.ForegroundColorSpan(0xFF80FF80.toInt()),
+                    0,
+                    5,
+                    android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
             typeface = Typeface.MONOSPACE
             textSize = 11f
             setTextColor(0xFFF2F2F2.toInt())
