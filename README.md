@@ -1,7 +1,7 @@
 <h1 align="center">BLE Hound</h1>
 
 <p align="center">
-Android Bluetooth Low Energy scanner designed to detect and highlight nearby tracking devices such as AirTag, Tile, and Galaxy SmartTag.
+Android wireless situational awareness scanner focused on BLE tracking detection, device classification, and real-time signal visibility.
 </p>
 
 <p align="center">
@@ -17,144 +17,151 @@ Android Bluetooth Low Energy scanner designed to detect and highlight nearby tra
 
 ## Overview
 
-BLE Hound is an Android Bluetooth Low Energy scanner built to identify nearby BLE devices with a focus on tracking devices such as:
+BLE Hound is an Android Bluetooth Low Energy scanner built for fast wireless awareness and field use.
 
-- Apple AirTag
-- Apple Find My network devices
-- Tile trackers
-- Samsung Galaxy SmartTag
+It detects and classifies nearby devices in real time, with focus on:
 
-The application analyzes Bluetooth advertisement packets and highlights tracker-class devices visually during active scans.
+- tracking devices  
+- cyber gadgets  
+- drones  
+- and MORE!  
 
-The goal is to provide quick situational awareness of nearby Bluetooth activity.
+The interface is optimized for rapid scanning, quick identification, and live signal tracking.
 
 ---
 
 ## Core Features
 
-- Real-time Bluetooth Low Energy scanning
-- Detection of common tracking devices including:
-  - Apple AirTag
-  - Apple Find My network devices
-  - Tile trackers
-  - Samsung Galaxy SmartTag
-- Device classification based on BLE advertisement data
-- Visual tracker highlighting in the device list
-- Optional vibration alerts when trackers are detected
-- Optional sound alerts when trackers are detected
-- Device detail screen with continuously updating RSSI
-- High-contrast interface optimized for rapid scanning
+- Real-time BLE scanning  
+- Live device classification   
+- Live header category counters:
+  - TRACKERS  
+  - GADGETS  
+  - DRONES  
+  - FEDS (Federally licensed/contracted)  
+- Color-matched classification system  
+- Device detail screen with live RSSI + raw advertisement data  
+- Optional vibration alerts  
+- Optional sound alerts  
+- Background monitoring mode  
+- Persistent Android notification with live counts  
+- Lock-screen visible monitoring  
+- Settings / About screen with links and documentation  
 
 ---
 
-## Tracker Identification
+## Device Classification
 
-BLE Hound visually marks trackers in the scanner list.
+BLE Hound identifies devices directly instead of generic labels.
 
-Indicators include:
+### Trackers
+- AirTag  
+- Find My  
+- Tile  
+- Galaxy Tag  
 
-- Orange `CLASS` text
-- Yellow outline around the device row
-- Optional vibration alert
-- Optional notification sound
+### Gadgets
+- Flipper Zero  
+- Pwnagotchi  
+- Card Skimmer patterns  
+- ESP32 / Arduino dev boards  
+- WiFi Pineapple patterns  
 
-These indicators allow trackers to be quickly identified even during dense scans.
+### Drones
+- DJI  
+- Parrot  
+- Skydio  
+- Autel  
+- BLE Remote ID broadcasts  
+
+### Feds
+- Axon  
+- Flock  
 
 ---
 
-## Interface Layout
-
-The scanner screen displays a structured BLE table.
+## Interface
 
 | RSSI | MAC | MFG | CLASS |
 |------|-----|-----|-------|
-| Signal strength | Bluetooth MAC address | Manufacturer ID | Device classification |
 
-Each row also displays a dedicated second line for the name field:
+Each device includes a name row:
+NAME: DeviceName
 
-```text
-NAME: DeviceNameHere
-```
-
-Tapping any device row opens the detailed device screen with continuously updating RSSI and advertisement data.
-
----
-
-## Alert Controls
-
-The control panel at the top of the interface contains the following controls:
-
-**START**  
-Begins BLE scanning.
-
-**STOP**  
-Freezes the list so individual devices can be inspected.
-
-**VIBRATE**  
-Enables vibration alerts when a tracker is detected.
-
-**SOUND**  
-Enables notification alerts when a tracker is detected.
-
-Alerts are rate limited to prevent repeated notifications during dense scans.
+Color system:
+- Yellow: Trackers  
+- Orange: Gadgets  
+- Purple: Drones  
+- Blue: Feds  
 
 ---
 
-## Download APK
+## Controls
 
-All APK releases are available from the Releases page.
-
-```bash
-https://github.com/GH0ST3CH/BLE-Hound/releases
-```
-
----
-
-## Requirements
-
-Android device with Bluetooth Low Energy support.
-
-Recommended Android version:
-
-Android 8.0 or newer.
-
-Required permissions:
-
-- Bluetooth
-- Bluetooth Scan
-- Bluetooth Connect
-- Vibrate
+START: Begins scanning  
+STOP: Freezes list  
+VIBRATE: Toggle vibration alerts  
+SOUND: Toggle sound alerts  
 
 ---
 
-## Credits
+## Background Monitoring
 
-This project draws inspiration from the following open source wireless tools.
+- Persistent notification  
+- Live category counts  
+- Lock-screen visibility   
 
-### HaleHound
+Example:
+Trackers: 2   Gadgets: 1   Drones: 0   Feds: 0
 
-BLE scanning concepts and device classification logic.
+---
 
-https://github.com/JesseCHale/HaleHound-CYD
+## RSSI
 
-### ESP32 Marauder â JustCallMeKoko
+RSSI = Received Signal Strength Indicator  
 
-Wireless reconnaissance techniques and tracker detection logic.
+Used for:
+- proximity estimation  
+- locating strongest signal  
+- walking heat mapping  
 
-https://github.com/justcallmekoko/ESP32Marauder
+---
+
+## Settings / About
+
+- Background monitoring toggle  
+- Category explanations  
+- RSSI explanation  
+- Creator info  
+- Links  
+
+---
+
+## Creator
+
+GH0ST3CH  
+https://github.com/GH0ST3CH  
+https://www.buymeacoffee.com/ghostechrepair  
+
+---
+
+## Inspiration
+
+HaleHound  
+https://github.com/JesseCHale/HaleHound-CYD  
+
+ESP32 Marauder  
+https://github.com/justcallmekoko/ESP32Marauder  
+
+---
+
+## Download
+
+https://github.com/GH0ST3CH/BLE-Hound/releases  
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
-
-https://github.com/GH0ST3CH/BLE-Hound/blob/main/LICENSE
-
----
-
-<p align="center">
-  <a href="https://www.buymeacoffee.com/ghostechrepair">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee">
-  </a>
-</p>
+MIT  
+https://github.com/GH0ST3CH/BLE-Hound/blob/main/LICENSE  
