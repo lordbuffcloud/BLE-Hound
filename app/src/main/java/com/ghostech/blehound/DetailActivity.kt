@@ -56,21 +56,21 @@ gatt.discoverServices()
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             val sb = StringBuilder()
-            sb.append("\n================ GATT PROFILE ================\n\n")
+            sb.append("\n================ GATT PROFILE\n[STATUS] GATT DISCONNECTED ================\n\n")
 
             for (service in gatt.services) {
                 val sUuid = service.uuid.toString()
                 val sName = uuidName(sUuid)
-                sb.append("\n[SERVICE]\n")
-                sb.append("UUID        : ").append(sUuid)
+                sb.append("\n------------------------------\n[SERVICE]\n")
+                sb.append("UUID        : ").append(sUuid).append("\n")
                 if (sName.isNotEmpty()) sb.append(" [").append(sName).append("]")
-                sb.append("--------------------------------\n")
+                sb.append("\n")
 
                 for (ch in service.characteristics) {
                     val cUuid = ch.uuid.toString()
                     val cName = uuidName(cUuid)
                     sb.append("  ├─ CHARACTERISTIC\n")
-                    sb.append("     UUID        : ").append(cUuid)
+                    sb.append("     UUID        : ").append(cUuid).append("\n")
                     if (cName.isNotEmpty()) sb.append(" [").append(cName).append("]")
 
                     if ((ch.properties and BluetoothGattCharacteristic.PROPERTY_READ) != 0) {
@@ -90,10 +90,10 @@ gatt.discoverServices()
                         gatt.readDescriptor(desc)
                     }
 
-                    sb.append("--------------------------------\n")
+                    sb.append("\n")
                 }
 
-                sb.append("--------------------------------\n")
+                sb.append("\n")
             }
 
             gattData = if (sb.isNotEmpty()) sb.toString() else gattData
@@ -368,15 +368,15 @@ gatt.discoverServices()
             }
 
             append("\nMANUFACTURER DATA\n")
-            append("-----------------\n")
+            append("-------\n")
             append("${d.manufacturerDataText}\n")
 
             append("\nSERVICE UUIDS\n")
-            append("-------------\n")
+            append("---\n")
             append("${d.serviceUuidsText}\n")
 
             append("\nRAW ADVERTISEMENT\n")
-            append("-----------------\n")
+            append("-------\n")
             append("${d.rawAdvText}\n")
 
             append("\nGATT DATA\n")
