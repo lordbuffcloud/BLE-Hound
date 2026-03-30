@@ -28,6 +28,7 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.os.VibratorManager
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -270,6 +271,7 @@ class MainActivity : Activity() {
     private var toneGenerator: ToneGenerator? = null
     private var wifiManager: WifiManager? = null
     private var isScannerActive = false
+    private var sessionRunning = false
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private var uiDirty = false
@@ -353,7 +355,7 @@ class MainActivity : Activity() {
             if (!BleStore.isListFrozen) adapter.notifyDataSetChanged()
 
             // Continuous drone beep
-            if (BleStore.dronePresent && BleStore.soundOnTracker) {
+            if (!BleStore.isListFrozen && BleStore.dronePresent && BleStore.soundOnTracker) {
                 val now = System.currentTimeMillis()
                 if (now - BleStore.lastDroneBeepMs > 1000) {
                     toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200)
@@ -491,7 +493,13 @@ class MainActivity : Activity() {
         chipRow.addView(droneChip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
         chipRow.addView(federalChip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(3) })
 
-        vibrator = getSystemService(Vibrator::class.java)
+        vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val vm = getSystemService(VibratorManager::class.java)
+            vm?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Vibrator::class.java)
+        }
         wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
 
@@ -529,10 +537,25 @@ class MainActivity : Activity() {
         }
 
         startButton = buildHellButton("START")
-        startButton.setOnClickListener { startScan() }
+        startButton.setOnClickListener {
+            if (!sessionRunning) {
+                startScan()
+                updateButtonStates()
+            } else {
+                resetToLaunchState()
+                updateButtonStates()
+            }
+        }
 
-        stopButton = buildHellButton("STOP")
-        stopButton.setOnClickListener { lockList() }
+        stopButton = buildHellButton("PAUSE")
+        stopButton.setOnClickListener {
+            if (!sessionRunning) return@setOnClickListener
+            if (BleStore.isListFrozen) {
+                resumeScan()
+            } else {
+                lockList()
+            }
+        }
 
         vibrateButton = buildHellButton("VIBRATE")
         vibrateButton.setOnClickListener {
@@ -820,9 +843,28 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun setHellButtonState(button: Button, enabled: Boolean) {
-        button.isEnabled = enabled
-        button.alpha = if (enabled) 1.0f else 0.38f
+    private fun stopActiveAlerts() {
+        try { vibrator?.cancel() } catch (_: Exception) {}
+        try { toneGenerator?.stopTone() } catch (_: Exception) {}
+        BleStore.dronePresent = false
+    }
+
+    private fun resetToLaunchState() {
+        stopActiveAlerts()
+        hardStopScanner()
+        sessionRunning = false
+        BleStore.shouldScan = false
+        BleStore.isListFrozen = false
+        BleStore.trackerSeenThisSession = false
+        BleStore.lastNotifyMs = 0L
+        BleStore.lastPacketSeenMs = 0L
+        BleStore.lastDiscoveryChangeMs = 0L
+        BleStore.lastScanRestartMs = 0L
+        BleStore.lastDroneBeepMs = 0L
+        BleStore.devices.clear()
+        uiDirty = true
+        renderDeviceList()
+        updateButtonStates()
     }
 
     // ---------------------------------------------------------------
@@ -864,6 +906,7 @@ class MainActivity : Activity() {
     }
 
     private fun notifyDeviceDetected(category: String) {
+        if (BleStore.isListFrozen) return
         val prefs = getSharedPreferences("blehound_prefs", MODE_PRIVATE)
 
         val enabled = when {
@@ -882,6 +925,7 @@ class MainActivity : Activity() {
 
         if (BleStore.vibrateOnTracker) {
             vibrator?.let { v ->
+                if (!v.hasVibrator()) return@let
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     v.vibrate(VibrationEffect.createOneShot(180, VibrationEffect.DEFAULT_AMPLITUDE))
                 } else {
@@ -896,11 +940,21 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun setHellButtonState(button: Button, enabled: Boolean) {
+        button.isEnabled = enabled
+        button.alpha = if (enabled) 1.0f else 0.38f
+    }
+
     private fun updateButtonStates() {
-        val startEnabled = !isScannerActive || BleStore.isListFrozen
-        val stopEnabled = isScannerActive && !BleStore.isListFrozen
-        setHellButtonState(startButton, startEnabled)
-        setHellButtonState(stopButton, stopEnabled)
+        startButton.text = if (sessionRunning) "STOP" else "START"
+        stopButton.text = if (!sessionRunning) "PAUSE" else if (BleStore.isListFrozen) "RESUME" else "PAUSE"
+
+        startButton.isEnabled = true
+        startButton.alpha = 1.0f
+
+        stopButton.isEnabled = sessionRunning
+        stopButton.alpha = if (sessionRunning) 1.0f else 0.38f
+
         vibrateButton.text = "VIBRATE"
         vibrateButton.alpha = if (BleStore.vibrateOnTracker) 1.0f else 0.55f
         soundButton.text = "SOUND"
@@ -961,6 +1015,8 @@ class MainActivity : Activity() {
     }
 
     private fun startScan() {
+        sessionRunning = true
+        BleStore.shouldScan = true
         BleStore.isListFrozen = false
         if (isScannerActive) {
             BleStore.shouldScan = true
@@ -980,12 +1036,30 @@ class MainActivity : Activity() {
     }
 
     private fun lockList() {
-        if (!isScannerActive) {
+        if (!sessionRunning) {
             updateButtonStates()
             return
         }
         BleStore.isListFrozen = true
         BleStore.shouldScan = true
+        stopActiveAlerts()
+        listView.isEnabled = true
+        listView.isClickable = true
+        listView.isFocusable = true
+        statusView.text = "PAUSED"
+        updateButtonStates()
+    }
+
+    private fun resumeScan() {
+        if (!sessionRunning) {
+            updateButtonStates()
+            return
+        }
+        BleStore.isListFrozen = false
+        BleStore.shouldScan = true
+        listView.isEnabled = true
+        listView.isClickable = true
+        listView.isFocusable = true
         statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
         updateButtonStates()
     }
