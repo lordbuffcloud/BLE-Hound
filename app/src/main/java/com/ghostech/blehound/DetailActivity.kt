@@ -19,18 +19,29 @@ import java.util.Locale
 
 import android.bluetooth.*
 import android.bluetooth.le.*
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.UUID
 
 
 class DetailActivity : Activity() {
+    private val SPP_UUID =
+        java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
 
     private lateinit var rssiView: TextView
     private lateinit var summaryView: TextView
     private lateinit var detailsView: TextView
 
     private lateinit var gattView: TextView
+    private lateinit var skimmerScanButton: Button
     private var gattData: String = ""
 
     private var bluetoothGatt: BluetoothGatt? = null
+    private var skimmerValidationConfidence: String? = null
+    private var skimmerValidationCode: String? = null
+    private var skimmerValidationText: String? = null
+
 
     private val gattCallback = object : BluetoothGattCallback() {
 
@@ -226,11 +237,18 @@ gatt.discoverServices()
             text = "SAVE LOG"
             setOnClickListener { saveCurrentDeviceLog() }
         }
+        skimmerScanButton = Button(this).apply {
+            text = "SKIMMER TEST"
+            visibility = android.view.View.GONE
+            setOnClickListener { beginSkimmerValidation() }
+        }
+
 
         headerPanel.addView(titleView)
         headerPanel.addView(rssiView)
         headerPanel.addView(summaryView)
         headerPanel.addView(saveButton)
+        headerPanel.addView(skimmerScanButton)
         val gattButton = Button(this).apply {
             text = "READ GATT"
             setOnClickListener { readGatt() }
@@ -296,6 +314,8 @@ gatt.discoverServices()
         bluetoothGatt = null
     }
 
+    
+
     private fun nowStamp(): String {
         return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
     }
@@ -336,15 +356,21 @@ gatt.discoverServices()
         if (svc.contains("FFFA")) return "BLE service UUID contains FFFA"
         if ("DJI" in n || "PARROT" in n || "SKYDIO" in n || "AUTEL" in n || "ANAFI" in n) return "BLE name matched drone vendor keyword"
         if (mac.startsWith("00:25:df") || "AXON" in n) return "Axon signature matched MAC prefix or name"
-        if ("FS EXT BATTERY" in n || "PENGUIN" in n || "FLOCK" in n || "PIGVISION" in n) return "Flock name signature matched"
-        if (m == "XUNTONG") return "Manufacturer matched XUNTONG (0x09C8)"
-        if (md.contains("09C8")) return "Manufacturer data contains 0x09C8"
+        if (classifyDevice(d) == "Flock") {
+            val flockAssessment = assessFlock(d)
+            if (flockAssessment.isFlock) return flockAssessment.reasonText
+        }
         return "Classification based on current BLE/Wi-Fi signature rules"
     }
 
     private fun buildResearchLog(d: BleSeenDevice): String {
         val deviceClass = classifyDevice(d)
-        val reason = buildClassificationReason(d)
+        val flockAssessment = if (deviceClass == "Flock") assessFlock(d) else null
+        val skimmerAssessment = if (deviceClass == "Card Skimmer") assessSkimmer(d) else null
+        val reason = flockAssessment?.reasonText
+            ?: skimmerValidationText
+            ?: skimmerAssessment?.reasonText
+            ?: buildClassificationReason(d)
         val ageMs = System.currentTimeMillis() - d.lastSeenMs
         val ageText = if (ageMs < 1000) "${ageMs}ms" else String.format(Locale.US, "%.1fs", ageMs / 1000.0)
 
@@ -354,6 +380,10 @@ gatt.discoverServices()
 
             append("LOGGED AT           : ${nowStamp()}\n")
             append("CLASS               : ${deviceClass}\n")
+            if (flockAssessment != null) {
+                append("CONFIDENCE          : ${flockAssessment.confidence}\n")
+                append("REASON CODE         : ${flockAssessment.reasonCode}\n")
+            }
             append("CLASS BASIS         : ${reason}\n")
             append("NAME                : ${d.name}\n")
             append("MAC ADDRESS         : ${d.address}\n")
@@ -504,6 +534,11 @@ gatt.discoverServices()
         rssiView.text = if (d.rssi != 0) "${d.rssi} dBm" else rssiView.text
         val deviceClass = classifyDevice(d)
         val description = getDeviceDescription(deviceClass)
+        val skimmerAssessment = if (deviceClass == "Card Skimmer") assessSkimmer(d) else null
+
+        skimmerScanButton.visibility =
+            if (deviceClass == "Card Skimmer") android.view.View.VISIBLE else android.view.View.GONE
+        val flockAssessment = if (deviceClass == "Flock") assessFlock(d) else null
 
         summaryView.text =
             "CLASS:${deviceClass}   MFG:${d.manufacturerText}   AGE:$ageText"
@@ -512,6 +547,16 @@ gatt.discoverServices()
             append("NAME           : ${d.name}\n")
             append("ADDRESS        : ${d.address}\n")
             append("CLASS          : ${deviceClass}\n")
+            if (flockAssessment != null) {
+                append("CONFIDENCE     : ${flockAssessment.confidence}\n")
+                append("REASON CODE    : ${flockAssessment.reasonCode}\n")
+                append("CLASS BASIS    : ${flockAssessment.reasonText}\n")
+            }
+            if (skimmerAssessment != null) {
+                append("CONFIDENCE     : ${skimmerValidationConfidence ?: skimmerAssessment.confidence}\n")
+                append("REASON CODE    : ${skimmerValidationCode ?: skimmerAssessment.reasonCode}\n")
+                append("CLASS BASIS    : ${skimmerValidationText ?: skimmerAssessment.reasonText}\n")
+            }
             if (description.isNotEmpty()) {
                 append("DESCRIPTION    : ${description}\n")
             }
@@ -531,6 +576,76 @@ gatt.discoverServices()
             append("${d.rawAdvText}\n")
         }
     }
+
+    private fun beginSkimmerValidation() {
+        val d = cachedDevice ?: return
+        val mac = d.address ?: return
+
+        skimmerValidationConfidence = "TESTING"
+        skimmerValidationCode = "CONNECTING"
+        skimmerValidationText = "Connecting..."
+        render()
+
+        Thread {
+            try {
+                val adapter = BluetoothAdapter.getDefaultAdapter()
+                val device = adapter.getRemoteDevice(mac)
+                adapter.cancelDiscovery()
+
+
+                val socket = try {
+                    device.createRfcommSocketToServiceRecord(SPP_UUID)
+                } catch (e: Exception) {
+                    device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
+                }
+
+                socket.connect()
+
+                val out = socket.outputStream
+                val input = socket.inputStream
+
+                out.write("P".toByteArray())
+                out.flush()
+
+                val buffer = ByteArray(32)
+                var response = ""
+                val start = System.currentTimeMillis()
+
+                while (System.currentTimeMillis() - start < 2000) {
+                    if (input.available() > 0) {
+                        val len = input.read(buffer)
+                        response += String(buffer, 0, len)
+                        break
+                    }
+                }
+
+                socket.close()
+
+
+                runOnUiThread {
+                    if (response.contains("M")) {
+                        skimmerValidationConfidence = "HIGH"
+                        skimmerValidationCode = "PROTOCOL_MATCH"
+                        skimmerValidationText = "Confirmed (M response)"
+                    } else {
+                        skimmerValidationConfidence = "MEDIUM"
+                        skimmerValidationCode = "NO_MATCH"
+                        skimmerValidationText = "No skimmer response"
+                    }
+                    render()
+                }
+
+            } catch (e: Exception) {
+                runOnUiThread {
+                    skimmerValidationConfidence = "LOW"
+                    skimmerValidationCode = "ERROR"
+                    skimmerValidationText = "Failed: ${e.message}"
+                    render()
+                }
+            }
+        }.start()
+    }
+
 }
 
 private const val SAVE_LOG_REQUEST = 2002

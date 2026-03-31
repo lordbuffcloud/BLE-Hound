@@ -200,7 +200,7 @@ fun classifyDevice(d: BleSeenDevice): String {
     }
 
     // Card Skimmer
-    if ("HC-03" in name || "HC-05" in name || "HC-06" in name) {
+    if (assessSkimmer(d).isSkimmerCandidate) {
         return "Card Skimmer"
     }
 
@@ -215,14 +215,27 @@ fun classifyDevice(d: BleSeenDevice): String {
     }
 
     // Flock / ALPR systems
-    val flockPrefixes = listOf(
-        "58:8e:81", "cc:cc:cc", "ec:1b:bd", "90:35:ea", "04:0d:84",
-        "f0:82:c0", "1c:34:f1", "38:5b:44", "94:34:69", "b4:e3:f9",
-        "70:c9:4e", "3c:91:80", "d8:f3:bc", "80:30:49", "14:5a:fc",
-        "74:4c:a1", "08:3a:88", "9c:2f:9d", "94:08:53", "e4:aa:ea"
+    val flockDirectPrefixes = listOf(
+        "04:0d:84", "58:8e:81", "90:35:ea", "cc:cc:cc", "ec:1b:bd",
+        "1c:34:f1", "38:5b:44", "94:34:69", "b4:e3:f9", "f0:82:c0",
+        "14:5a:fc", "3c:91:80", "70:c9:4e", "80:30:49", "d8:f3:bc",
+        "08:3a:88", "74:4c:a1", "94:08:53", "9c:2f:9d", "e4:aa:ea",
+        "b4:1e:52"
     )
-    if ("FS EXT BATTERY" in name || "PENGUIN" in name || "FLOCK" in name || "PIGVISION" in name ||
-        mfg == "XUNTONG" || mfgData.contains("09C8") || flockPrefixes.contains(macPrefix)) {
+
+    val flockMfrPrefixes = listOf(
+        "00:f4:8d", "d0:39:57", "e0:0a:f6",
+        "f4:6a:dd", "f8:a2:d6", "e8:d0:fc"
+    )
+
+    val flockNameMatch =
+        "FS EXT BATTERY" in name || "PENGUIN" in name || "FLOCK" in name || "PIGVISION" in name
+
+    val flockDirectMatch = flockDirectPrefixes.contains(macPrefix)
+    val flockMfrMatch = flockMfrPrefixes.contains(macPrefix)
+    val flockXuntongMatch = mfg == "XUNTONG" || "09C8" in mfgData
+
+    if (assessFlock(d).isFlock) {
         return "Flock"
     }
     // --- End nyanBOX Ported Logic ---
@@ -230,6 +243,111 @@ fun classifyDevice(d: BleSeenDevice): String {
     if (svc != "-" && svc.isNotBlank()) return "BLE Device"
 
     return "-"
+}
+
+fun extractManufacturerCompanyIds(mfgDataText: String): Set<String> {
+    val regex = Regex("""0x([0-9A-Fa-f]{4})=""")
+    return regex.findAll(mfgDataText)
+        .map { it.groupValues[1].uppercase() }
+        .toSet()
+}
+
+data class FlockAssessment(
+    val isFlock: Boolean,
+    val confidence: String,
+    val reasonCode: String,
+    val reasonText: String
+)
+
+fun assessFlock(d: BleSeenDevice): FlockAssessment {
+    val name = d.name.uppercase()
+    val macPrefix = d.address.take(8).lowercase()
+    val mfg = d.manufacturerText.uppercase()
+    val companyIds = extractManufacturerCompanyIds(d.manufacturerDataText)
+
+    val flockDirectPrefixes = setOf(
+        "04:0d:84", "58:8e:81", "90:35:ea", "cc:cc:cc", "ec:1b:bd",
+        "1c:34:f1", "38:5b:44", "94:34:69", "b4:e3:f9", "f0:82:c0",
+        "14:5a:fc", "3c:91:80", "70:c9:4e", "80:30:49", "d8:f3:bc",
+        "08:3a:88", "74:4c:a1", "94:08:53", "9c:2f:9d", "e4:aa:ea",
+        "b4:1e:52"
+    )
+
+    val flockMfrPrefixes = setOf(
+        "00:f4:8d", "d0:39:57", "e0:0a:f6",
+        "f4:6a:dd", "f8:a2:d6", "e8:d0:fc"
+    )
+
+    val flockNameMatch =
+        "FS EXT BATTERY" in name || "PENGUIN" in name || "FLOCK" in name || "PIGVISION" in name
+
+    val flockDirectMatch = macPrefix in flockDirectPrefixes
+    val flockMfrMatch = macPrefix in flockMfrPrefixes
+    val flockXuntongMatch = mfg == "XUNTONG" || "09C8" in companyIds
+
+    return when {
+        flockDirectMatch -> FlockAssessment(
+            true,
+            "HIGH",
+            "FLOCK_DIRECT_PREFIX",
+            "Matched current HaleHound direct Flock MAC prefix list"
+        )
+        flockXuntongMatch && flockNameMatch -> FlockAssessment(
+            true,
+            "HIGH",
+            "FLOCK_XUNTONG+NAME",
+            "Matched XUNTONG manufacturer company ID 0x09C8 and Flock-related device name"
+        )
+        flockMfrMatch && flockNameMatch -> FlockAssessment(
+            true,
+            "MEDIUM",
+            "FLOCK_MFR_PREFIX+NAME",
+            "Matched HaleHound contract-manufacturer MAC prefix and Flock-related device name"
+        )
+        flockXuntongMatch -> FlockAssessment(
+            true,
+            "MEDIUM",
+            "FLOCK_XUNTONG",
+            "Matched XUNTONG manufacturer company ID 0x09C8"
+        )
+        flockMfrMatch -> FlockAssessment(
+            true,
+            "LOW",
+            "FLOCK_MFR_PREFIX",
+            "Matched HaleHound contract-manufacturer MAC prefix"
+        )
+        flockNameMatch -> FlockAssessment(
+            true,
+            "LOW",
+            "FLOCK_NAME",
+            "Matched Flock-related BLE device name only"
+        )
+        else -> FlockAssessment(false, "-", "-", "Not identified as Flock")
+    }
+}
+
+data class SkimmerAssessment(
+    val isSkimmerCandidate: Boolean,
+    val confidence: String,
+    val reasonCode: String,
+    val reasonText: String
+)
+
+fun assessSkimmer(d: BleSeenDevice): SkimmerAssessment {
+    val name = d.name.uppercase()
+    val hcNameMatch =
+        "HC-03" in name || "HC-05" in name || "HC-06" in name
+
+    return if (hcNameMatch) {
+        SkimmerAssessment(
+            true,
+            "LOW",
+            "SKIMMER_HC_NAME",
+            "Matched HC-03/HC-05/HC-06 Bluetooth module naming pattern"
+        )
+    } else {
+        SkimmerAssessment(false, "-", "-", "Not identified as a skimmer candidate")
+    }
 }
 
 // ---------------------------------------------------------------------------
