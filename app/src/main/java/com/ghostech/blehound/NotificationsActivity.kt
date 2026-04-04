@@ -1,5 +1,6 @@
 package com.ghostech.blehound
 
+import android.app.AlertDialog
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Typeface
@@ -45,10 +46,10 @@ class NotificationsActivity : Activity() {
         gadgetButton = buildButton("")
         droneButton = buildButton("")
         fedButton = buildButton("")
-        trackerButton.setOnClickListener { pickSound("sound_trackers", 3001) }
-        gadgetButton.setOnClickListener { pickSound("sound_gadgets", 3002) }
-        droneButton.setOnClickListener { pickSound("sound_drones", 3003) }
-        fedButton.setOnClickListener { pickSound("sound_feds", 3004) }
+        trackerButton.setOnClickListener { showSoundMenu("sound_trackers", 3001) }
+        gadgetButton.setOnClickListener { showSoundMenu("sound_gadgets", 3002) }
+        droneButton.setOnClickListener { showSoundMenu("sound_drones", 3003) }
+        fedButton.setOnClickListener { showSoundMenu("sound_feds", 3004) }
 
         root.addView(title)
         root.addView(trackerButton)
@@ -58,6 +59,26 @@ class NotificationsActivity : Activity() {
 
         setContentView(root)
         refresh()
+    }
+
+    private fun showSoundMenu(key: String, code: Int) {
+        val items = arrayOf("Default", "Disable", "Pick Sound")
+        AlertDialog.Builder(this)
+            .setTitle("Notification option")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        prefs.edit().putString(key, "__DEFAULT__").apply()
+                        refresh()
+                    }
+                    1 -> {
+                        prefs.edit().putString(key, "__DISABLED__").apply()
+                        refresh()
+                    }
+                    2 -> pickSound(key, code)
+                }
+            }
+            .show()
     }
 
     private fun pickSound(key: String, code: Int) {
@@ -100,8 +121,8 @@ class NotificationsActivity : Activity() {
 
     private fun labelFor(key: String): String {
         val raw = prefs.getString(key, "__DEFAULT__") ?: "__DEFAULT__"
-        if (raw == "__DEFAULT__") return "DEFAULT"
-        if (raw == "__SILENT__") return "SILENT"
+        if (raw == "__DEFAULT__" || raw == "__SILENT__") return "DEFAULT"
+        if (raw == "__DISABLED__") return "DISABLE"
         val uri = Uri.parse(raw)
         val rt = RingtoneManager.getRingtone(this, uri) ?: return "DEFAULT"
         return rt.getTitle(this)

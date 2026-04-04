@@ -10,8 +10,8 @@ android {
         applicationId = "com.ghostech.blehound"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 161
+        versionName = "1.6.1"
     }
 
     buildTypes {

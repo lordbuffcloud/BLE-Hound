@@ -47,9 +47,10 @@ class AboutActivity : Activity() {
         }
         content.addView(sectionTitle("CATEGORIES"))
         content.addView(bodyText("TRACKERS: AirTag, Tile, Galaxy Tag, Find My"))
-        content.addView(bodyText("GADGETS: Flipper Zero, Pwnagotchi, Card Skimmer, Dev Board, WiFi Pineapple"))
+        content.addView(bodyText("GADGETS: Flipper Zero, Pwnagotchi, Card Skimmer, Dev Board, WiFi Pineapple, Meta Glasses"))
         content.addView(bodyText("DRONES: DJI / Parrot / Skydio / Autel / BLE Remote ID"))
         content.addView(bodyText("FEDS: Axon and Flock detections"))
+        content.addView(spannableNote("NOTE:", " Pwnagotchi and WiFi Pineapple detections are limited on Android. Unlike dedicated hardware tools such as HaleHound or ESP Marauder that use raw 802.11 frame analysis and promiscuous mode, this app relies on standard WiFi scan results. As a result, many spoofed or low-visibility devices may not appear or may be inconsistently detected."))
 
         content.addView(sectionTitle("RSSI"))
         content.addView(bodyText("RSSI stands for Received Signal Strength Indicator. It reflects signal strength at the time of observation and helps compare relative proximity and movement trends."))
@@ -112,6 +113,23 @@ class AboutActivity : Activity() {
             setStroke(dp(1), themeColor(this@AboutActivity))
         }
         setPadding(dp(10), dp(14), dp(10), dp(14))
+    }
+
+    
+    private fun spannableNote(prefix: String, body: String) = TextView(this).apply {
+        val full = prefix + body
+        val spannable = android.text.SpannableString(full)
+        spannable.setSpan(
+            android.text.style.ForegroundColorSpan(0xFFFF4444.toInt()),
+            0,
+            prefix.length,
+            android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        text = spannable
+        textSize = 13f
+        typeface = Typeface.MONOSPACE
+        setTextColor(0xFFFFE0C0.toInt())
+        setPadding(0, 0, 0, dp(10))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

@@ -72,6 +72,8 @@ data class BleSeenDevice(
 
 object BleStore {
     val devices = LinkedHashMap<String, BleSeenDevice>()
+    val latchedTrackerClassByAddress = LinkedHashMap<String, String>()
+    val latchedTrackerSeenMsByAddress = LinkedHashMap<String, Long>()
     var shouldScan = false
     var isListFrozen = false
     var vibrateOnTracker = false
@@ -147,8 +149,36 @@ fun hasNyanboxBleRemoteIdSignature(d: BleSeenDevice): Boolean {
     return raw.contains("16FAFF0D")
 }
 
+fun hasRawPattern(rawText: String, hexNoSpace: String): Boolean {
+    return rawText.uppercase().replace(" ", "").contains(hexNoSpace.uppercase().replace(" ", ""))
+}
+
+fun hasServiceUuidHint(serviceText: String, shortUuid: String): Boolean {
+    val s = serviceText.uppercase()
+    val u = shortUuid.uppercase()
+    return s.contains(u) || s.contains("0000${u}-0000-1000-8000-00805F9B34FB")
+}
+
+fun isAirTagSignature(d: BleSeenDevice): Boolean {
+    return hasRawPattern(d.rawAdvText, "1EFF4C00") ||
+            hasRawPattern(d.rawAdvText, "4C001219")
+}
+
+fun isTileSignature(d: BleSeenDevice): Boolean {
+    return hasServiceUuidHint(d.serviceUuidsText, "FEED") ||
+            hasServiceUuidHint(d.serviceUuidsText, "FEEC")
+}
+
+fun isGalaxyTagSignature(d: BleSeenDevice): Boolean {
+    return hasServiceUuidHint(d.serviceUuidsText, "FD5A")
+}
+
+fun isRayBanMetaSignature(d: BleSeenDevice): Boolean {
+    return hasServiceUuidHint(d.serviceUuidsText, "FD5F")
+}
 
 fun classifyDevice(d: BleSeenDevice): String {
+    getLatchedTrackerClass(d.address)?.let { return it }
     val name = d.name.lowercase()
     val mfg = d.manufacturerText.uppercase()
     val raw = d.rawAdvText.uppercase()
@@ -168,20 +198,19 @@ fun classifyDevice(d: BleSeenDevice): String {
 
     // --- Apple devices ---
     if (mfg == "APPLE") {
-        if ("AIRTAG" in name) return "AirTag"
+        if (isAirTagSignature(d)) return "AirTag"
         if ("FINDMY" in name || "FIND MY" in name) return "Find My"
         if ("AIRPODS" in name || "AIRPOD" in name) return "AirPods"
         if ("IBEACON" in name) return "iBeacon"
-        if ("004C" in mfgData && ("12 19" in raw || "004C 12" in raw || "004C 19" in raw)) return "AirTag"
         if ("004C" in mfgData && "0215" in raw.replace(" ", "")) return "iBeacon"
         if ("BEATS" in name) return "Beats"
         return "Apple BLE"
     }
 
     // --- General BLE ---
-    if ("META" in name || "RAYBAN" in name || "RAY-BAN" in name) return "Meta Glasses"
-    if ("TILE" in name) return "Tile"
-    if ("SMARTTAG" in name || "GALAXY TAG" in name || (mfg == "SAMSNG" && "TAG" in name)) return "Galaxy Tag"
+    if (isRayBanMetaSignature(d)) return "Meta Glasses"
+    if (isTileSignature(d)) return "Tile"
+    if (isGalaxyTagSignature(d)) return "Galaxy Tag"
     if ("BEACON" in name) return "Beacon"
     if ("EARBUD" in name || "HEADSET" in name) return "Audio BLE"
     if ("WATCH" in name) return "Watch"
@@ -193,7 +222,7 @@ fun classifyDevice(d: BleSeenDevice): String {
     if ("MSFT" in mfg) return "Microsoft BLE"
     if ("SAMSNG" in mfg) return "Samsung BLE"
 
-    // --- nyanBOX Ported BLE Identifiers ---
+    // --- BLE Identifiers ---
     val macPrefix = d.address.take(8).lowercase()
 
     // Flipper Zero
@@ -213,7 +242,7 @@ fun classifyDevice(d: BleSeenDevice): String {
         return "Card Skimmer"
     }
 
-    // Drone (nyanBOX-style Android port)
+    // Drone detection
     val droneNameMatch =
         "DJI" in name || "PARROT" in name || "SKYDIO" in name ||
         "AUTEL" in name || "ANAFI" in name || mfg == "DJI"
@@ -228,7 +257,7 @@ fun classifyDevice(d: BleSeenDevice): String {
         return "Drone"
     }
 
-    // Axon (nyanBOX-style Android port)
+    // Axon detection
     val axonMacMatch = macPrefix == "00:25:df"
     val axonMfgMatch = mfg == "AXON"
     val axonNameMatch = "AXON" in name || "TASER" in name
@@ -265,7 +294,7 @@ fun classifyDevice(d: BleSeenDevice): String {
     if (assessFlock(d).isFlock) {
         return "Flock"
     }
-    // --- End nyanBOX Ported Logic ---
+    // --- End BLE Identifier Logic ---
 
     if (svc != "-" && svc.isNotBlank()) return "BLE Device"
 
@@ -317,7 +346,7 @@ fun assessFlock(d: BleSeenDevice): FlockAssessment {
             true,
             "HIGH",
             "FLOCK_DIRECT_PREFIX",
-            "Matched current HaleHound direct Flock MAC prefix list"
+            "Matched known Flock MAC prefix list"
         )
         flockXuntongMatch && flockNameMatch -> FlockAssessment(
             true,
@@ -329,7 +358,7 @@ fun assessFlock(d: BleSeenDevice): FlockAssessment {
             true,
             "MEDIUM",
             "FLOCK_MFR_PREFIX+NAME",
-            "Matched HaleHound contract-manufacturer MAC prefix and Flock-related device name"
+            "Matched known contract-manufacturer MAC prefix and Flock-related device name"
         )
         flockXuntongMatch -> FlockAssessment(
             true,
@@ -341,7 +370,7 @@ fun assessFlock(d: BleSeenDevice): FlockAssessment {
             true,
             "LOW",
             "FLOCK_MFR_PREFIX",
-            "Matched HaleHound contract-manufacturer MAC prefix"
+            "Matched known contract-manufacturer MAC prefix"
         )
         flockNameMatch -> FlockAssessment(
             true,
@@ -381,12 +410,31 @@ fun assessSkimmer(d: BleSeenDevice): SkimmerAssessment {
 // Category helpers
 // ---------------------------------------------------------------------------
 
-fun isCyberGadgetClass(c: String) = c == "Flipper Zero" || c == "Pwnagotchi" || c == "Card Skimmer" || c == "Dev Board" || c == "WiFi Pineapple"
+fun isCyberGadgetClass(c: String) =
+    c == "Flipper Zero" ||
+    c == "Meta Glasses"
+ || c == "Pwnagotchi" || c == "Card Skimmer" || c == "Dev Board" || c == "WiFi Pineapple"
 fun isDroneClass(c: String) = c == "Drone"
 fun isPoliceClass(c: String) =
     c == "Axon Device" || c == "Axon Cam" || c == "Axon Taser" || c == "Flock"
 fun isTrackerClass(c: String) = c == "AirTag" || c == "Tile" || c == "Galaxy Tag" || c == "Find My"
 fun isAlertCategory(c: String) = isTrackerClass(c) || isCyberGadgetClass(c) || isDroneClass(c) || isPoliceClass(c)
+
+fun latchTrackerClass(address: String, classText: String) {
+    if (!isTrackerClass(classText)) return
+    BleStore.latchedTrackerClassByAddress[address] = classText
+    BleStore.latchedTrackerSeenMsByAddress[address] = System.currentTimeMillis()
+}
+
+fun getLatchedTrackerClass(address: String): String? {
+    val seen = BleStore.latchedTrackerSeenMsByAddress[address] ?: return null
+    if (System.currentTimeMillis() - seen > 30000L) {
+        BleStore.latchedTrackerSeenMsByAddress.remove(address)
+        BleStore.latchedTrackerClassByAddress.remove(address)
+        return null
+    }
+    return BleStore.latchedTrackerClassByAddress[address]
+}
 
 // ===================================================================
 // MainActivity
@@ -418,6 +466,7 @@ class MainActivity : Activity() {
     private var wifiManager: WifiManager? = null
     private var isScannerActive = false
     private var sessionRunning = false
+    private var filteredModeEnabled = true
 
     private val uiHandler = Handler(Looper.getMainLooper())
     private var uiDirty = false
@@ -446,39 +495,45 @@ class MainActivity : Activity() {
             val rssi = r.level
 
             val existing = BleStore.devices[bssid]
-            if (existing == null) {
-                BleStore.devices[bssid] = BleSeenDevice(
-                    name = ssid.ifEmpty { "Hidden Network" },
-                    address = bssid,
-                    rssi = rssi,
-                    packetCount = 1,
-                    lastSeenMs = now,
-                    manufacturerText = "WIFI",
-                    manufacturerDataText = if (r.capabilities.isNullOrBlank()) "-" else r.capabilities,
-                    serviceUuidsText = "FREQ=${r.frequency}",
-                    serviceDataText = "-",
-                    flagsText = "-",
-                    txPowerText = "-",
-                    appearanceText = "-",
-                    rawAdvText = "SSID=${if (ssid.isEmpty()) "<hidden>" else ssid}",
-                    isWifi = true
-                )
-            } else {
-                if (ssid.isNotEmpty()) existing.name = ssid
-                existing.rssi = rssi
-                existing.packetCount += 1
-                existing.lastSeenMs = now
-                existing.manufacturerText = "WIFI"
-                existing.manufacturerDataText = if (r.capabilities.isNullOrBlank()) "-" else r.capabilities
-                existing.serviceUuidsText = "FREQ=${r.frequency}"
-                existing.serviceDataText = "-"
-                existing.flagsText = "-"
-                existing.txPowerText = "-"
-                existing.appearanceText = "-"
-                existing.rawAdvText = "SSID=${if (ssid.isEmpty()) "<hidden>" else ssid}"
+            val candidate = (existing?.copy() ?: BleSeenDevice(
+                name = ssid.ifEmpty { "Hidden Network" },
+                address = bssid,
+                rssi = rssi,
+                packetCount = 0,
+                lastSeenMs = now,
+                manufacturerText = "WIFI",
+                manufacturerDataText = "-",
+                serviceUuidsText = "-",
+                serviceDataText = "-",
+                flagsText = "-",
+                txPowerText = "-",
+                appearanceText = "-",
+                rawAdvText = "-",
+                isWifi = true
+            )).apply {
+                if (ssid.isNotEmpty()) name = ssid else if (name.isBlank()) name = "Hidden Network"
+                this.rssi = rssi
+                packetCount += 1
+                lastSeenMs = now
+                manufacturerText = "WIFI"
+                manufacturerDataText = if (r.capabilities.isNullOrBlank()) "-" else r.capabilities
+                serviceUuidsText = "FREQ=${r.frequency}"
+                serviceDataText = "-"
+                flagsText = "-"
+                txPowerText = "-"
+                appearanceText = "-"
+                rawAdvText = "SSID=${if (ssid.isEmpty()) "<hidden>" else ssid}"
+                isWifi = true
             }
 
-            val cls = classifyDevice(BleStore.devices[bssid]!!)
+            val cls = classifyDevice(candidate)
+            if (isTrackerClass(cls)) latchTrackerClass(bssid, cls)
+            if (filteredModeEnabled && !isAlertCategory(cls)) {
+                BleStore.devices.remove(bssid)
+                continue
+            }
+
+            BleStore.devices[bssid] = candidate
             if (isAlertCategory(cls)) notifyDeviceDetected(cls)
         }
         if (!BleStore.isListFrozen) uiDirty = true
@@ -758,6 +813,9 @@ class MainActivity : Activity() {
         root.addView(listView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         setContentView(root)
+        syncSessionState()
+        loadFilterModePreference()
+        applyCurrentFilter()
         updateFlameHeader()
         ensureBackgroundMonitorState()
 
@@ -788,6 +846,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        syncSessionState()
+        loadFilterModePreference()
+        applyCurrentFilter()
         flameTitleView.setTextColor(themeColor(this))
         if (::settingsButtonView.isInitialized) settingsButtonView.setTextColor(themeColor(this))
         refreshHellButtonOutline(startButton)
@@ -825,6 +886,27 @@ class MainActivity : Activity() {
     // ---------------------------------------------------------------
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun loadFilterModePreference() {
+        filteredModeEnabled = getSharedPreferences("blehound_prefs", MODE_PRIVATE).getBoolean("filtered_mode", true)
+    }
+
+    private fun syncSessionState() {
+        sessionRunning = isScannerActive || BleStore.shouldScan
+    }
+
+    private fun applyCurrentFilter() {
+        if (!filteredModeEnabled) return
+        val iter = BleStore.devices.entries.iterator()
+        var removed = false
+        while (iter.hasNext()) {
+            if (!isAlertCategory(classifyDevice(iter.next().value))) {
+                iter.remove()
+                removed = true
+            }
+        }
+        if (removed) uiDirty = true
+    }
 
     private fun updateFlameHeader() {
         val tick = animationTick % 4
@@ -1000,6 +1082,7 @@ class MainActivity : Activity() {
         hardStopScanner()
         sessionRunning = false
         BleStore.shouldScan = false
+        syncSessionState()
         BleStore.isListFrozen = false
         BleStore.trackerSeenThisSession = false
         BleStore.lastNotifyMs = 0L
@@ -1008,6 +1091,8 @@ class MainActivity : Activity() {
         BleStore.lastScanRestartMs = 0L
         BleStore.lastDroneBeepMs = 0L
         BleStore.devices.clear()
+        BleStore.latchedTrackerClassByAddress.clear()
+        BleStore.latchedTrackerSeenMsByAddress.clear()
         uiDirty = true
         renderDeviceList()
         updateButtonStates()
@@ -1031,7 +1116,7 @@ class MainActivity : Activity() {
 
         val raw = prefs.getString(key, "__DEFAULT__") ?: "__DEFAULT__"
 
-        if (raw == "__SILENT__") return
+        if (raw == "__SILENT__" || raw == "__DISABLED__") return
 
         if (raw == "__DEFAULT__") {
             toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 180)
@@ -1063,7 +1148,16 @@ class MainActivity : Activity() {
             else -> true
         }
 
+        val soundKey = when {
+            isTrackerClass(category) -> "sound_trackers"
+            isCyberGadgetClass(category) -> "sound_gadgets"
+            isDroneClass(category) -> "sound_drones"
+            isPoliceClass(category) -> "sound_feds"
+            else -> ""
+        }
+
         if (!enabled) return
+        if (soundKey.isNotEmpty() && prefs.getString(soundKey, "__DEFAULT__") == "__DISABLED__") return
 
         val now = System.currentTimeMillis()
         if (now - BleStore.lastNotifyMs < 3000) return
@@ -1131,6 +1225,7 @@ class MainActivity : Activity() {
             scanner?.startScan(null, settings, scanCallback)
             isScannerActive = true
             BleStore.shouldScan = true
+            syncSessionState()
             BleStore.lastScanRestartMs = System.currentTimeMillis()
             statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
         } catch (_: Exception) {}
@@ -1145,15 +1240,16 @@ class MainActivity : Activity() {
             return
         }
         scanner = adapter.bluetoothLeScanner
+        syncSessionState()
         if (BleStore.shouldScan) {
             val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED) {
                 scanner?.startScan(null, settings, scanCallback)
                 isScannerActive = true
+                syncSessionState()
                 BleStore.lastScanRestartMs = System.currentTimeMillis()
                 BleStore.lastPacketSeenMs = System.currentTimeMillis()
                 BleStore.lastDiscoveryChangeMs = System.currentTimeMillis()
-        BleStore.lastDiscoveryChangeMs = System.currentTimeMillis()
             }
         }
         statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
@@ -1166,6 +1262,7 @@ class MainActivity : Activity() {
         BleStore.isListFrozen = false
         if (isScannerActive) {
             BleStore.shouldScan = true
+            syncSessionState()
             renderDeviceList()
             updateButtonStates()
             return
@@ -1175,6 +1272,7 @@ class MainActivity : Activity() {
         scanner?.startScan(null, settings, scanCallback)
         isScannerActive = true
         BleStore.shouldScan = true
+        syncSessionState()
         BleStore.lastScanRestartMs = System.currentTimeMillis()
         BleStore.lastPacketSeenMs = System.currentTimeMillis()
         statusView.text = "TAP ANY DEVICE ROW TO VIEW DETAILS"
@@ -1216,6 +1314,7 @@ class MainActivity : Activity() {
             scanner?.stopScan(scanCallback)
         }
         isScannerActive = false
+        syncSessionState()
         BleStore.lastPacketSeenMs = 0L
         BleStore.lastDiscoveryChangeMs = 0L
         updateButtonStates()
@@ -1248,9 +1347,9 @@ class MainActivity : Activity() {
             val rawAdvText = formatRawAdv(record)
 
             val existing = BleStore.devices[addr]
-            if (existing == null) {
+            val candidate = if (existing == null) {
                 BleStore.lastDiscoveryChangeMs = now
-                BleStore.devices[addr] = BleSeenDevice(
+                BleSeenDevice(
                     name = name, address = addr, rssi = rssi,
                     packetCount = 1, lastSeenMs = now,
                     manufacturerText = manufacturerText,
@@ -1290,7 +1389,19 @@ class MainActivity : Activity() {
                 existing.txPowerText = txPowerText
                 existing.appearanceText = appearanceText
                 existing.rawAdvText = rawAdvText
+                existing
             }
+
+            val preliminaryClass = classifyDevice(candidate)
+            if (isTrackerClass(preliminaryClass)) latchTrackerClass(addr, preliminaryClass)
+            if (filteredModeEnabled && !isAlertCategory(preliminaryClass)) {
+                BleStore.devices.remove(addr)
+                if (!BleStore.isListFrozen) uiDirty = true
+                updateHeaderCounts()
+                return
+            }
+
+            BleStore.devices[addr] = candidate
 
             // Extract Drone Remote ID coordinates (ODID via UUID 0xFFFA)
             if (record != null) {

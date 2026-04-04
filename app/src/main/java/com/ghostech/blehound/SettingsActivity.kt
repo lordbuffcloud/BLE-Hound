@@ -1,6 +1,7 @@
 package com.ghostech.blehound
 
 import android.Manifest
+import android.app.AlertDialog
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -20,6 +21,7 @@ import androidx.core.content.ContextCompat
 class SettingsActivity : Activity() {
 
     private lateinit var bgButton: Button
+    private lateinit var filteredModeButton: Button
     private var lastThemeHex: String = ""
     private val prefs by lazy { getSharedPreferences("blehound_prefs", MODE_PRIVATE) }
 
@@ -64,6 +66,10 @@ class SettingsActivity : Activity() {
         bgButton = buildHellButton("")
         bgButton.setOnClickListener { toggleBackground() }
         content.addView(bgButton)
+
+        filteredModeButton = buildHellButton("")
+        filteredModeButton.setOnClickListener { toggleFilteredMode() }
+        content.addView(filteredModeButton)
 
         val notificationsButton = buildHellButton("NOTIFICATIONS")
         notificationsButton.setOnClickListener {
@@ -184,6 +190,25 @@ class SettingsActivity : Activity() {
 
     private fun refreshButtons() {
         bgButton.text = if (prefs.getBoolean("background_enabled", false)) "BACKGROUND MONITORING: ON" else "BACKGROUND MONITORING: OFF"
+        filteredModeButton.text = if (prefs.getBoolean("filtered_mode", true)) "FILTERED MODE: ON" else "FILTERED MODE: OFF"
+    }
+
+    private fun toggleFilteredMode() {
+        val enabled = prefs.getBoolean("filtered_mode", true)
+        if (!enabled) {
+            prefs.edit().putBoolean("filtered_mode", true).apply()
+            refreshButtons()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Disable Filtered Mode?")
+            .setMessage("Unfiltered traffic in BLE-dense environments may cause the app to freeze and crash.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Acknowledge") { _, _ ->
+                prefs.edit().putBoolean("filtered_mode", false).apply()
+                refreshButtons()
+            }
+            .show()
     }
 
     private fun openUrl(url: String) {

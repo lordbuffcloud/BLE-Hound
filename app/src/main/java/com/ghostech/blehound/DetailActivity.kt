@@ -343,8 +343,17 @@ gatt.discoverServices()
             if (isLikelyWifiPineapple(d.name.lowercase(), mac)) return "Wi-Fi SSID/BSSID matched Pineapple heuristic"
             return "Wi-Fi classification based on SSID/BSSID heuristics"
         }
-        if (m == "APPLE" && ("AIRTAG" in n || ("004C" in md && ("12 19" in raw || "004C 12" in raw || "004C 19" in raw))) ) {
-            return "Apple manufacturer data / BLE advertisement matched AirTag pattern"
+        if (isAirTagSignature(d)) {
+            return "BLE advertisement matched AirTag payload signature"
+        }
+        if (isTileSignature(d)) {
+            return "BLE service UUID matched Tile signature"
+        }
+        if (isGalaxyTagSignature(d)) {
+            return "BLE service UUID matched Samsung SmartTag signature"
+        }
+        if (isRayBanMetaSignature(d)) {
+            return "BLE service UUID matched RayBan/Meta signature"
         }
         if (mac == "80:e1:26" || mac == "80:e1:27" || mac == "0c:fa:22" || "3081" in svc || "3082" in svc || "3083" in svc || "3080" in svc || "FLIPPER" in n) {
             return "Flipper Zero signature matched MAC, service UUID, or name"
@@ -413,11 +422,6 @@ gatt.discoverServices()
             append("---------\n")
             append(if (gattData.isBlank()) "Not collected" else gattData)
 
-
-            append("\nGATT DATA\n")
-            append("---------\n")
-            append(if (gattData.isBlank()) "Not collected" else gattData)
-
         }
     }
 
@@ -456,9 +460,10 @@ gatt.discoverServices()
             "Pwnagotchi" -> "AI-powered WiFi auditing tool built on Raspberry Pi. Passively captures WPA handshakes to audit wireless network security. Often carried by security researchers."
             "WiFi Pineapple" -> "Rogue access point and WiFi auditing platform by Hak5. Used for man-in-the-middle attacks, credential harvesting, and wireless network reconnaissance. Identified by OUI pattern xx:13:37."
             "Card Skimmer" -> "WARNING: Potential card skimmer detected. HC-05/HC-06 Bluetooth modules are commonly found in illegal skimming devices attached to ATMs, gas pumps, and POS terminals. Exercise caution."
-            "Drone" -> "Unmanned Aerial Vehicle (UAV) detected. BLE detection follows nyanBOX-style Open Drone ID / Remote ID signature logic where feasible on Android. Coordinates are shown below if available."
+            "Drone" -> "Unmanned Aerial Vehicle (UAV) detected. BLE detection follows Open Drone ID / Remote ID signature logic where feasible on Android. Coordinates are shown below if available."
             "Axon Device" -> "Axon law enforcement equipment detected. This label is used when BLE evidence indicates an Axon device but the advertisement name does not identify the exact product type."
             "Axon Cam" -> "Axon camera detected. This label is used only when the BLE advertisement name suggests a camera or body camera."
+            "Meta Glasses" -> "Ray-Ban Meta smart glasses. BLE wearable capable of audio, camera, and wireless connectivity."
             "Axon Taser" -> "Axon TASER device detected. This label is used only when the BLE advertisement name suggests a TASER device."
             "Flock" -> "Flock Safety Automated License Plate Recognition (ALPR) system detected. These cameras are used by law enforcement and private communities to log vehicle plate data."
             "AirTag" -> "Apple AirTag Bluetooth tracker. Can be used legitimately for item tracking but also potentially for unwanted surveillance."
