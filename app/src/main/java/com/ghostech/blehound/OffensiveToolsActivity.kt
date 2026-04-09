@@ -279,7 +279,7 @@ class OffensiveToolsActivity : Activity() {
                 val data = BleAdvertiseHelper.buildManufacturerData(0x004C, payload)
                 safeAdvertise(data)
 
-                handler.postDelayed(this, 300)
+                handler.postDelayed(this, 1500) // 1.5 sec per ad, iOS needs time to process
             }
         }
         handler.post(runnable)
