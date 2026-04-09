@@ -243,11 +243,7 @@ class OffensiveToolsActivity : Activity() {
                         .setTimeout(0)
                         .build()
 
-                    val data = AdvertiseData.Builder()
-                        .setIncludeDeviceName(false)
-                        .setIncludeTxPowerLevel(false)
-                        .addManufacturerSpecificData(0x004C, mfgData)
-                        .build()
+                    val data = BleAdvertiseHelper.buildManufacturerData(0x004C, mfgData)
 
                     val callback = createCallback()
                     advertiser?.startAdvertising(settings, data, callback)
@@ -341,11 +337,7 @@ class OffensiveToolsActivity : Activity() {
                         .setTimeout(0)
                         .build()
 
-                    val data = AdvertiseData.Builder()
-                        .setIncludeDeviceName(false)
-                        .setIncludeTxPowerLevel(false)
-                        .addManufacturerSpecificData(0x0006, mfgData)
-                        .build()
+                    val data = BleAdvertiseHelper.buildManufacturerData(0x0006, mfgData)
 
                     val callback = createCallback()
                     advertiser?.startAdvertising(settings, data, callback)
