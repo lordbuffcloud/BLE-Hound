@@ -243,9 +243,12 @@ class OffensiveToolsActivity : Activity() {
                         .setTimeout(0)
                         .build()
 
-                    val data = AdvertiseData.Builder()
-                        .addManufacturerSpecificData(0x004C, mfgData) // Apple company ID
-                        .build()
+                    val dataBuilder = AdvertiseData.Builder()
+                    dataBuilder.setIncludeDeviceName(false)
+                    dataBuilder.setIncludeTxPowerLevel(false)
+                    @Suppress("DEPRECATION")
+                    dataBuilder.addManufacturerSpecificData(76, mfgData) // 0x4C = Apple
+                    val data = dataBuilder.build()
 
                     val callback = createCallback()
                     advertiser?.startAdvertising(settings, data, callback)
@@ -339,9 +342,12 @@ class OffensiveToolsActivity : Activity() {
                         .setTimeout(0)
                         .build()
 
-                    val data = AdvertiseData.Builder()
-                        .addManufacturerSpecificData(0x0006, mfgData) // Microsoft company ID
-                        .build()
+                    val dataBuilder = AdvertiseData.Builder()
+                    dataBuilder.setIncludeDeviceName(false)
+                    dataBuilder.setIncludeTxPowerLevel(false)
+                    @Suppress("DEPRECATION")
+                    dataBuilder.addManufacturerSpecificData(6, mfgData) // 0x06 = Microsoft
+                    val data = dataBuilder.build()
 
                     val callback = createCallback()
                     advertiser?.startAdvertising(settings, data, callback)
