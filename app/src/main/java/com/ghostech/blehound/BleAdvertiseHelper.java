@@ -11,7 +11,7 @@ public class BleAdvertiseHelper {
         return new AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
-                .addManufacturerSpecificData(companyId, data)
+                .addManufacturerData(companyId, data)
                 .build();
     }
 }
