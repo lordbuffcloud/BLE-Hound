@@ -62,7 +62,9 @@ class SettingsActivity : Activity() {
         content.addView(bwButton)
 
         filteredModeButton = buildHellButton("")
-        filteredModeButton.setOnClickListener { toggleFilteredMode() }
+        filteredModeButton.setOnClickListener {
+            startActivity(Intent(this, FilterModeActivity::class.java))
+        }
         content.addView(filteredModeButton)
 
         val notificationsButton = buildHellButton("NOTIFICATIONS")
@@ -82,6 +84,7 @@ class SettingsActivity : Activity() {
             startActivity(Intent(this, AboutActivity::class.java))
         }
         content.addView(aboutButton)
+
         val backButton = buildHellButton("BACK")
         backButton.setOnClickListener { finish() }
 
@@ -114,9 +117,7 @@ class SettingsActivity : Activity() {
     private fun refreshButtons() {
         bgButton.text = "BACKGROUND MONITORING"
         val prefs = getSharedPreferences("blehound_prefs", MODE_PRIVATE)
-        filteredModeButton.text =
-            if (prefs.getBoolean("filtered_mode", true)) "FILTERED MODE: ON"
-            else "FILTERED MODE: OFF"
+        filteredModeButton.text = "FILTER MODE"
     }
 
     private fun toggleFilteredMode() {

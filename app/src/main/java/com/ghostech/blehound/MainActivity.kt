@@ -434,6 +434,17 @@ private fun buildHighValueSignature(d: BleSeenDevice): String {
     ).joinToString("||")
 }
 
+private fun buildStableRuleSignature(d: BleSeenDevice): String {
+    val cls = classifyDevice(d)
+    return listOf(
+        if (d.isWifi) "WIFI" else "BLE",
+        cleanSigPart(cls, 40),
+        cleanSigPart(d.manufacturerText, 40),
+        cleanSigPart(d.serviceUuidsText, 80),
+        cleanSigPart(d.appearanceText, 40)
+    ).joinToString("||")
+}
+
 
 
 private fun ruleEntry(sig: String, mac: String): String =
@@ -450,7 +461,7 @@ private fun ruleMac(entry: String): String =
 private fun findRuleMatch(context: Context, key: String, d: BleSeenDevice?, mac: String): String? {
     val rules = ruleSet(context, key)
     val macNorm = mac.uppercase()
-    val sig = d?.let { buildHighValueSignature(it) }
+    val sig = d?.let { buildStableRuleSignature(it) }
 
     if (sig != null) {
         val bySig = rules.firstOrNull { ruleSig(it) == sig }
@@ -470,6 +481,62 @@ fun isDeviceWhitelisted(context: Context, mac: String): Boolean =
 fun isDeviceBlacklisted(context: Context, mac: String): Boolean =
     findRuleMatch(context, RULE_BLACKLIST, BleStore.devices[mac], mac) != null
 
+private fun filterPref(context: Context, key: String): Boolean =
+    context.getSharedPreferences("blehound_prefs", Context.MODE_PRIVATE).getBoolean(key, true)
+
+private fun filterCategoryKey(cls: String): String? = when {
+    isTrackerClass(cls) -> "filter_cat_trackers"
+    isCyberGadgetClass(cls) -> "filter_cat_gadgets"
+    isDroneClass(cls) -> "filter_cat_drones"
+    cls == "Axon Device" || cls == "Axon Cam" || cls == "Axon Taser" || cls == "Flock" -> "filter_cat_feds"
+    else -> null
+}
+
+private fun filterTypeEnabled(context: Context, cls: String): Boolean {
+    val prefs = context.getSharedPreferences("blehound_prefs", Context.MODE_PRIVATE)
+    return when (cls) {
+        "AirTag" -> prefs.getBoolean("filter_type_airtag", false)
+        "Find My" -> prefs.getBoolean("filter_type_findmy", false)
+        "Tile" -> prefs.getBoolean("filter_type_tile", false)
+        "Galaxy Tag" -> prefs.getBoolean("filter_type_galaxytag", false)
+        "Flipper Zero" -> prefs.getBoolean("filter_type_flipperzero", false)
+        "Pwnagotchi" -> prefs.getBoolean("filter_type_pwnagotchi", false)
+        "Card Skimmer" -> prefs.getBoolean("filter_type_cardskimmer", false)
+        "ESP32/Arduino Device" -> prefs.getBoolean("filter_type_esp32arduino", false)
+        "WiFi Pineapple" -> prefs.getBoolean("filter_type_wifipineapple", false)
+        "Meta Glasses" -> prefs.getBoolean("filter_type_metaglasses", false)
+        "DJI Drone" -> prefs.getBoolean("filter_type_djidrone", false)
+        "Parrot Drone" -> prefs.getBoolean("filter_type_parrotdrone", false)
+        "Skydio Drone" -> prefs.getBoolean("filter_type_skydiodrone", false)
+        "Autel Drone" -> prefs.getBoolean("filter_type_auteldrone", false)
+        "Remote ID Drone" -> prefs.getBoolean("filter_type_remoteiddrone", false)
+        "Axon Device", "Axon Cam", "Axon Taser" -> prefs.getBoolean("filter_type_axon", false)
+        "Flock" -> prefs.getBoolean("filter_type_flock", false)
+        else -> false
+    }
+}
+
+fun shouldShowDevice(context: Context, d: BleSeenDevice): Boolean {
+    if (!filterPref(context, "filtered_mode")) return true
+
+    val cls = classifyDevice(d)
+    val catKey = filterCategoryKey(cls)
+
+    val normalVisible =
+        when {
+            catKey == null -> false
+            filterPref(context, catKey) -> true
+            filterTypeEnabled(context, cls) -> true
+            else -> false
+        }
+
+    val specialVisible =
+        (isDeviceBlacklisted(context, d.address) && filterPref(context, "filter_show_blacklisted")) ||
+        (isDeviceWhitelisted(context, d.address) && filterPref(context, "filter_show_whitelisted"))
+
+    return normalVisible || specialVisible
+}
+
 fun toggleWhitelist(context: Context, mac: String) {
     val wl = ruleSet(context, RULE_WHITELIST)
     val bl = ruleSet(context, RULE_BLACKLIST)
@@ -479,7 +546,7 @@ fun toggleWhitelist(context: Context, mac: String) {
     if (existing != null) {
         wl.remove(existing)
     } else {
-        val sig = d?.let { buildHighValueSignature(it) } ?: ""
+        val sig = d?.let { buildStableRuleSignature(it) } ?: ""
         wl.add(ruleEntry(sig, mac))
         findRuleMatch(context, RULE_BLACKLIST, d, mac)?.let { bl.remove(it) }
     }
@@ -497,7 +564,7 @@ fun toggleBlacklist(context: Context, mac: String) {
     if (existing != null) {
         bl.remove(existing)
     } else {
-        val sig = d?.let { buildHighValueSignature(it) } ?: ""
+        val sig = d?.let { buildStableRuleSignature(it) } ?: ""
         bl.add(ruleEntry(sig, mac))
         findRuleMatch(context, RULE_WHITELIST, d, mac)?.let { wl.remove(it) }
     }
@@ -630,8 +697,13 @@ class MainActivity : Activity() {
 
             val cls = classifyDevice(candidate)
             if (isTrackerClass(cls)) latchTrackerClass(bssid, cls)
-            if (filteredModeEnabled && !isAlertCategory(cls)) {
-                BleStore.devices.remove(bssid)
+            if (!shouldShowDevice(this, candidate)) {
+                BleStore.devices[bssid] = candidate
+                if (isAlertCategory(cls)) {
+                    BleStore.trackerSeenThisSession = true
+                    notifyDeviceDetected(cls, true)
+                }
+                // keep in store for popup processing, but skip UI
                 continue
             }
 
@@ -1014,7 +1086,7 @@ class MainActivity : Activity() {
         val iter = BleStore.devices.entries.iterator()
         var removed = false
         while (iter.hasNext()) {
-            if (!isAlertCategory(classifyDevice(iter.next().value))) {
+            if (!shouldShowDevice(this, iter.next().value)) {
                 iter.remove()
                 removed = true
             }
@@ -1075,7 +1147,7 @@ class MainActivity : Activity() {
         var droneCount = 0
         var federalCount = 0
 
-        for (d in BleStore.devices.values) {
+        for (d in BleStore.devices.values.filter { shouldShowDevice(this, it) }) {
             val c = classifyDevice(d)
             when {
                 isTrackerClass(c) -> trackerCount++
@@ -1250,9 +1322,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun notifyDeviceDetected(category: String) {
-        if (BleStore.isListFrozen) return
+    private fun popupPrefKeyForClassMain(c: String): String? = when (c) {
+        "Drone" -> "popup_drone"
+        "AirTag" -> "popup_airtag"
+        "Tile" -> "popup_tile"
+        "Galaxy Tag" -> "popup_galaxytag"
+        "Find My" -> "popup_findmy"
+        "Flipper Zero" -> "popup_flipper"
+        "Pwnagotchi" -> "popup_pwnagotchi"
+        "Card Skimmer" -> "popup_skimmer"
+        "WiFi Pineapple" -> "popup_pineapple"
+        "Meta Glasses" -> "popup_metaglasses"
+        "Axon Device" -> "popup_axondevice"
+        "Axon Cam" -> "popup_axoncam"
+        "Axon Taser" -> "popup_axontaser"
+        "Flock" -> "popup_flock"
+        else -> null
+    }
+
+    private fun notifyDeviceDetected(category: String, forceEvenWhenBackgroundEnabled: Boolean = false) {
         val prefs = getSharedPreferences("blehound_prefs", MODE_PRIVATE)
+        val bgEnabled = prefs.getBoolean("background_enabled", false)
+        val popupKey = popupPrefKeyForClassMain(category)
+        val popupEnabledForCategory = popupKey != null && prefs.getBoolean(popupKey, false)
+
+        if (bgEnabled && popupEnabledForCategory && !forceEvenWhenBackgroundEnabled) return
+        if (BleStore.isListFrozen) return
 
         val enabled = when {
             isTrackerClass(category) -> prefs.getBoolean("notif_trackers", true)
@@ -1511,10 +1606,13 @@ class MainActivity : Activity() {
 
             val preliminaryClass = classifyDevice(candidate)
             if (isTrackerClass(preliminaryClass)) latchTrackerClass(addr, preliminaryClass)
-            if (filteredModeEnabled && !isAlertCategory(preliminaryClass)) {
-                BleStore.devices.remove(addr)
-                if (!BleStore.isListFrozen) uiDirty = true
-                updateHeaderCounts()
+            if (!shouldShowDevice(this@MainActivity, candidate)) {
+                BleStore.devices[addr] = candidate
+                if (isAlertCategory(preliminaryClass)) {
+                    BleStore.trackerSeenThisSession = true
+                    notifyDeviceDetected(preliminaryClass, true)
+                }
+                // keep in store for popup processing, but skip UI
                 return
             }
 
@@ -1564,7 +1662,7 @@ class MainActivity : Activity() {
     // ---------------------------------------------------------------
 
     private fun renderDeviceList() {
-        val sorted = BleStore.devices.values.sortedWith(
+        val sorted = BleStore.devices.values.filter { shouldShowDevice(this, it) }.sortedWith(
             compareByDescending<BleSeenDevice> { it.rssi }.thenByDescending { it.lastSeenMs }
         )
 

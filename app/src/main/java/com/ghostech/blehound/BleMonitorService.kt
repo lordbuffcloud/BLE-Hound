@@ -121,7 +121,9 @@ class BleMonitorService : Service() {
 
     private fun vibratePopupIfEnabled() {
         val prefs = getSharedPreferences("blehound_prefs", MODE_PRIVATE)
-        if (!prefs.getBoolean("popup_vibrate", false)) return
+        val popupVibrate = prefs.getBoolean("popup_vibrate", false)
+        val mainVibrate = BleStore.vibrateOnTracker
+        if (!popupVibrate && !mainVibrate) return
 
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -204,12 +206,14 @@ class BleMonitorService : Service() {
             val cls = classifyDevice(d)
 
             val isBlacklisted = isDeviceBlacklisted(this, d.address)
-            val allowBlacklist = prefs.getBoolean("popup_blacklist", false)
 
             if (isDeviceWhitelisted(this, d.address)) continue
 
-            val prefKey = if (isBlacklisted) "popup_blacklist" else (popupPrefKeyForClass(cls) ?: continue)
-            if (!prefs.getBoolean(prefKey, false)) continue
+            val classPrefKey = popupPrefKeyForClass(cls)
+            val classPopupEnabled = classPrefKey != null && prefs.getBoolean(classPrefKey, false)
+            val blacklistPopupEnabled = isBlacklisted && prefs.getBoolean("popup_blacklist", false)
+
+            if (!classPopupEnabled && !blacklistPopupEnabled) continue
 
             val key = "${cls}|${d.address}"
             val now = System.currentTimeMillis()
