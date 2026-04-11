@@ -433,53 +433,89 @@ class OffensiveToolsActivity : Activity() {
     // ─── BEE SPAM ───
     // 30 bee-themed device names flooding every BLE list in range
     // Signature nyanBEE swarm attack
+    // Uses setName + BLUETOOTH_CONNECT permission (not just ADVERTISE)
+    // Also requests scan response with device name for maximum visibility
     private fun startBeeSpam() {
+        // Request BLUETOOTH_CONNECT if not granted (needed for setName)
+        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(
+                android.Manifest.permission.BLUETOOTH_CONNECT,
+                android.Manifest.permission.BLUETOOTH_ADVERTISE
+            ), 100)
+            statusText?.text = "NEED BLUETOOTH_CONNECT PERMISSION"
+            statusText?.setTextColor(0xFFFF4444.toInt())
+            isAttacking = false
+            return
+        }
+
         val runnable = object : Runnable {
             override fun run() {
                 if (!isAttacking) return
 
                 val name = beeSwarmNames.random()
+
+                // Set the adapter name (requires BLUETOOTH_CONNECT)
                 try {
                     val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
                     adapter?.setName(name.take(20))
-                } catch (_: SecurityException) {}
+                } catch (e: SecurityException) {
+                    runOnUiThread {
+                        statusText?.text = "BLUETOOTH_CONNECT DENIED"
+                        statusText?.setTextColor(0xFFFF4444.toInt())
+                    }
+                    isAttacking = false
+                    return
+                }
 
-                val data = android.bluetooth.le.AdvertiseData.Builder()
-                    .setIncludeDeviceName(true)
-                    .setIncludeTxPowerLevel(false)
-                    .build()
+                // Small delay to let adapter name propagate before advertising
+                handler.postDelayed({
+                    if (!isAttacking) return@postDelayed
 
-                try {
-                    currentCallback?.let { advertiser?.stopAdvertising(it) }
-                } catch (_: SecurityException) {}
+                    try {
+                        currentCallback?.let { advertiser?.stopAdvertising(it) }
+                    } catch (_: SecurityException) {}
 
-                currentCallback = object : AdvertiseCallback() {
-                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                        runOnUiThread {
-                            packetCount++
-                            packetsText?.text = "Bees: $packetCount | $name"
+                    val adData = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(false)
+                        .setIncludeTxPowerLevel(false)
+                        .build()
+
+                    // Scan response carries the device name
+                    val scanResponse = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(true)
+                        .setIncludeTxPowerLevel(false)
+                        .build()
+
+                    currentCallback = object : AdvertiseCallback() {
+                        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                            runOnUiThread {
+                                packetCount++
+                                packetsText?.text = "Bees: $packetCount | $name"
+                            }
+                        }
+                        override fun onStartFailure(errorCode: Int) {
+                            runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
                         }
                     }
-                    override fun onStartFailure(errorCode: Int) {
-                        runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
+
+                    val settings = AdvertiseSettings.Builder()
+                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                        .setConnectable(true) // Connectable so scanners show the name
+                        .setTimeout(0)
+                        .build()
+
+                    try {
+                        advertiser?.startAdvertising(settings, adData, scanResponse, currentCallback)
+                    } catch (_: SecurityException) {
+                        runOnUiThread {
+                            statusText?.text = "PERMISSION DENIED"
+                        }
+                        isAttacking = false
                     }
-                }
+                }, 50) // 50ms delay for name propagation
 
-                val settings = AdvertiseSettings.Builder()
-                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                    .setConnectable(false)
-                    .setTimeout(0)
-                    .build()
-
-                try {
-                    advertiser?.startAdvertising(settings, data, currentCallback)
-                } catch (_: SecurityException) {
-                    statusText?.text = "PERMISSION DENIED"
-                    isAttacking = false
-                }
-
-                handler.postDelayed(this, 400)
+                handler.postDelayed(this, 500)
             }
         }
         handler.post(runnable)
