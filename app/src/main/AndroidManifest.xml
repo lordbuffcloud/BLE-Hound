@@ -59,7 +59,8 @@
 
         <activity
             android:name=".OffensiveToolsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
 
 
         <activity

