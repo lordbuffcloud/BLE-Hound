@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "BLEHound"
 include(":app")
+include(":wearapp")
