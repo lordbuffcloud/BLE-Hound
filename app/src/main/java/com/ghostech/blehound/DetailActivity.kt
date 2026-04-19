@@ -194,7 +194,7 @@ gatt.discoverServices()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
         }
 
         val headerPanel = LinearLayout(this).apply {
@@ -203,9 +203,9 @@ gatt.discoverServices()
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(
-                    0xFF2A0000.toInt(),
-                    0xFF140000.toInt(),
-                    0xFF000000.toInt()
+                    0xFF1C1C20.toInt(),
+                    0xFF151517.toInt(),
+                    0xFF0B0B0C.toInt()
                 )
             ).apply {
                 setStroke(dp(1), themeColor(this@DetailActivity))
@@ -299,7 +299,7 @@ gatt.discoverServices()
             textSize = 13f
             typeface = Typeface.MONOSPACE
             setTextColor(0xFF9CFF9C.toInt())
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
             setPadding(dp(16), dp(16), dp(16), dp(16))
         }
 
@@ -310,7 +310,7 @@ gatt.discoverServices()
         }
 
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
             addView(scrollContainer)
         }
 

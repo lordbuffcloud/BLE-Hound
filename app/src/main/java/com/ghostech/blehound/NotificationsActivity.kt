@@ -26,7 +26,7 @@ class NotificationsActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
             setPadding(dp(16), dp(24), dp(16), dp(24))
         }
 
@@ -38,7 +38,7 @@ class NotificationsActivity : Activity() {
             setTextColor(themeColor(this@NotificationsActivity))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF2A0000.toInt(), 0xFF140000.toInt(), 0xFF000000.toInt())
+                intArrayOf(0xFF1C1C20.toInt(), 0xFF151517.toInt(), 0xFF0B0B0C.toInt())
             ).apply { setStroke(dp(1), themeColor(this@NotificationsActivity)) }
             setPadding(dp(18), dp(14), dp(18), dp(14))
         }
@@ -146,10 +146,10 @@ class NotificationsActivity : Activity() {
         isAllCaps = true
         textSize = 13f
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setTextColor(0xFFFFF1E0.toInt())
+        setTextColor(0xFFFFB300.toInt())
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(0xFF6A0000.toInt(), 0xFF260000.toInt())
+            intArrayOf(0xFF1E1E22.toInt(), 0xFF151517.toInt())
         ).apply {
             cornerRadius = dp(18).toFloat()
             setStroke(dp(1), themeColor(this@NotificationsActivity))

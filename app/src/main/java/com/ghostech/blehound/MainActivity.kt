@@ -799,7 +799,7 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
         }
 
         headerPanel = LinearLayout(this).apply {
@@ -808,7 +808,7 @@ class MainActivity : Activity() {
             setPadding(dp(18), dp(24), dp(18), dp(14))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF2A0000.toInt(), 0xFF140000.toInt(), 0xFF000000.toInt())
+                intArrayOf(0xFF1C1C20.toInt(), 0xFF151517.toInt(), 0xFF0B0B0C.toInt())
             ).apply { setStroke(dp(1), themeColor(this@MainActivity)) }
         }
 
@@ -819,12 +819,12 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            text = "BLE HOUND"
+            text = "houndBEE"
             gravity = Gravity.CENTER
             textSize = 26f
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD_ITALIC)
             setTextColor(themeColor(this@MainActivity))
-            setShadowLayer(22f, 0f, 0f, 0xFFFF1E00.toInt())
+            setShadowLayer(22f, 0f, 0f, 0xFFFFB300.toInt())
             letterSpacing = 0.12f
             setPadding(0, 0, 0, dp(6))
         }
@@ -976,7 +976,7 @@ class MainActivity : Activity() {
         adapter = DeviceListAdapter(this) { device -> openDetail(device.address) }
 
         listView = ListView(this).apply {
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
             divider = null
             dividerHeight = 0
         }
@@ -1099,34 +1099,34 @@ class MainActivity : Activity() {
 
         val titleColor = if (isDefaultTheme(this)) {
             when (tick) {
-                0 -> 0xFFFF5A1F.toInt()
-                1 -> 0xFFFF6A2A.toInt()
-                2 -> 0xFFFF7A35.toInt()
-                else -> 0xFFFF6A2A.toInt()
+                0 -> 0xFFFFAA00.toInt()
+                1 -> 0xFFFFB300.toInt()
+                2 -> 0xFFFFBE00.toInt()
+                else -> 0xFFFFB300.toInt()
             }
         } else {
             themeColor(this)
         }
 
         val glowColor = when (tick) {
-            0 -> 0xAAFF2200.toInt()
-            1 -> 0xAAFF6600.toInt()
-            2 -> 0xAAFFAA00.toInt()
-            else -> 0xAAFF3300.toInt()
+            0 -> 0xAAFFAA00.toInt()
+            1 -> 0xAAFFB300.toInt()
+            2 -> 0xAAFFCC00.toInt()
+            else -> 0xAAFFB300.toInt()
         }
 
         val topColor = when (tick) {
-            0 -> 0xFF220000.toInt()
-            1 -> 0xFF2A0000.toInt()
-            2 -> 0xFF300800.toInt()
-            else -> 0xFF1A0000.toInt()
+            0 -> 0xFF1A1200.toInt()
+            1 -> 0xFF201800.toInt()
+            2 -> 0xFF241A00.toInt()
+            else -> 0xFF141000.toInt()
         }
 
         val midColor = when (tick) {
-            0 -> 0xFF110000.toInt()
-            1 -> 0xFF160000.toInt()
-            2 -> 0xFF1F0500.toInt()
-            else -> 0xFF100000.toInt()
+            0 -> 0xFF0D0900.toInt()
+            1 -> 0xFF100C00.toInt()
+            2 -> 0xFF130F00.toInt()
+            else -> 0xFF0A0800.toInt()
         }
 
         flameTitleView.setTextColor(titleColor)
@@ -1134,7 +1134,7 @@ class MainActivity : Activity() {
 
         headerPanel.background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(topColor, midColor, 0xFF000000.toInt())
+            intArrayOf(topColor, midColor, 0xFF0B0B0C.toInt())
         ).apply {
             setStroke(dp(1), themeColor(this@MainActivity))
         }
@@ -1200,10 +1200,10 @@ class MainActivity : Activity() {
             isAllCaps = true
             textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(0xFFFFF1E0.toInt())
+            setTextColor(0xFFFFB300.toInt())
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF6A0000.toInt(), 0xFF260000.toInt())
+                intArrayOf(0xFF1E1E22.toInt(), 0xFF151517.toInt())
             ).apply {
                 cornerRadius = dp(18).toFloat()
                 setStroke(dp(1), themeColor(this@MainActivity))

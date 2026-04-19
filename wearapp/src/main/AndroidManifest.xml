@@ -20,7 +20,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="BLE Hound"
+        android:label="houndBEE"
         android:theme="@android:style/Theme.DeviceDefault">
 
         <activity

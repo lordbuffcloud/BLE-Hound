@@ -266,7 +266,7 @@ post {
 }
             isAllCaps = true
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(0xFFFFF1E0.toInt())
+            setTextColor(0xFFFFB300.toInt())
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(adjustBrightness(tc, 1.10f), adjustBrightness(tc, 0.55f))

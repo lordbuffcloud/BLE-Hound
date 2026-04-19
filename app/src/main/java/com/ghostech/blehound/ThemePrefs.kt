@@ -5,11 +5,11 @@ import android.graphics.Color
 
 fun themeHex(context: Context): String {
     val prefs = context.getSharedPreferences("blehound_prefs", Context.MODE_PRIVATE)
-    return prefs.getString("theme_hex", "#FF5522") ?: "#FF5522"
+    return prefs.getString("theme_hex", "#FFB300") ?: "#FFB300"
 }
 
 fun themeColor(context: Context): Int {
-    return try { Color.parseColor(themeHex(context)) } catch (_: Exception) { Color.parseColor("#FF5522") }
+    return try { Color.parseColor(themeHex(context)) } catch (_: Exception) { Color.parseColor("#FFB300") }
 }
 
 fun isWhiteTheme(context: Context): Boolean {
@@ -32,5 +32,5 @@ fun themedListRowColor(context: Context): Int {
 
 fun isDefaultTheme(context: Context): Boolean {
     val hex = themeHex(context)
-    return hex.equals("#FF5522", ignoreCase = true)
+    return hex.equals("#FFB300", ignoreCase = true)
 }

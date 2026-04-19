@@ -18,7 +18,7 @@ class ThemeActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF000000.toInt())
+            setBackgroundColor(0xFF0B0B0C.toInt())
             setPadding(dp(16), dp(24), dp(16), dp(24))
         }
 
@@ -30,13 +30,13 @@ class ThemeActivity : Activity() {
             setTextColor(themeColor(this@ThemeActivity))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF2A0000.toInt(), 0xFF140000.toInt(), 0xFF000000.toInt())
+                intArrayOf(0xFF1C1C20.toInt(), 0xFF151517.toInt(), 0xFF0B0B0C.toInt())
             ).apply { setStroke(dp(1), themeColor(this@ThemeActivity)) }
             setPadding(dp(18), dp(14), dp(18), dp(14))
         }
 
         val colors = listOf(
-            "#FF5522", "#FF0000", "#FF8800", "#FFD700",
+            "#FFB300", "#FF5522", "#FF0000", "#FF8800",
             "#00C853", "#00B8D4", "#2962FF", "#7C4DFF",
             "#FF4081", "#FFFFFF"
         )
@@ -81,7 +81,7 @@ class ThemeActivity : Activity() {
 
         val defaultButton = buildButton("RESET TO DEFAULT THEME")
         defaultButton.setOnClickListener {
-            prefs.edit().putString("theme_hex", "#FF5522").apply()
+            prefs.edit().putString("theme_hex", "#FFB300").apply()
             finish()
         }
 
@@ -97,10 +97,10 @@ class ThemeActivity : Activity() {
         isAllCaps = true
         textSize = 13f
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setTextColor(0xFFFFF1E0.toInt())
+        setTextColor(0xFFFFB300.toInt())
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(0xFF6A0000.toInt(), 0xFF260000.toInt())
+            intArrayOf(0xFF1E1E22.toInt(), 0xFF151517.toInt())
         ).apply {
             cornerRadius = dp(18).toFloat()
             setStroke(dp(1), themeColor(this@ThemeActivity))
