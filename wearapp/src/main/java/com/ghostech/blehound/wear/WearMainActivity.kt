@@ -23,11 +23,20 @@ class WearMainActivity : ComponentActivity() {
         }
     }
 
+    private val scanPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) vm.startScan()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             BleHoundWearApp(
-                vm = vm,
+                vm               = vm,
+                onScanToggle     = { enable ->
+                    if (enable) requestScanAndStart() else vm.stopScan()
+                },
                 onWardriveToggle = { enable ->
                     if (enable) requestWardriveAndStart() else vm.stopWardrive()
                 }
@@ -38,6 +47,14 @@ class WearMainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshPhoneConnection()
+    }
+
+    private fun requestScanAndStart() {
+        if (vm.hasBlePermission()) {
+            vm.startScan()
+        } else {
+            scanPermissionLauncher.launch(Manifest.permission.BLUETOOTH_SCAN)
+        }
     }
 
     private fun requestWardriveAndStart() {

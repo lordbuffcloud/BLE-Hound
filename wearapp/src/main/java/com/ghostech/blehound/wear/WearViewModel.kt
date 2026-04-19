@@ -20,14 +20,26 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
 
     private val appContext: Application = app
 
+    // Phone-sync
     val summary: StateFlow<BleHoundSummary>          = WearRepository.summary
     val phoneConnected: StateFlow<Boolean>            = WearRepository.phoneConnected
+
+    // Wardrive
     val wardriveActive: StateFlow<Boolean>            = WearRepository.wardriveActive
     val wardriveHits: StateFlow<Int>                  = WearRepository.wardriveHits
     val wardriveGpsAvailable: StateFlow<Boolean>      = WearRepository.wardriveGpsAvailable
 
+    // Standalone scan
+    val scanActive: StateFlow<Boolean>                = WearRepository.scanActive
+    val nearbyDevices: StateFlow<List<WearBleDevice>> = WearRepository.nearbyDevices
+
+    // Alert
     private val _activeAlert = MutableStateFlow<TrackerAlert?>(null)
     val activeAlert: StateFlow<TrackerAlert?> = _activeAlert.asStateFlow()
+
+    // Selected device for detail view
+    private val _selectedDevice = MutableStateFlow<WearBleDevice?>(null)
+    val selectedDevice: StateFlow<WearBleDevice?> = _selectedDevice.asStateFlow()
 
     private val lastAlertMs = mutableMapOf<String, Long>()
 
@@ -46,21 +58,38 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun pruneAlertMap(nowMs: Long) {
-        if (lastAlertMs.size <= MAX_ALERT_ENTRIES) return
-        val cutoff = nowMs - WearConstants.ALERT_THROTTLE_MS * 4
-        lastAlertMs.entries.removeIf { it.value < cutoff }
-    }
+    // --- Alert ---
+    fun dismissAlert() { _activeAlert.value = null }
 
-    fun dismissAlert() {
-        _activeAlert.value = null
-    }
-
+    // --- Permissions ---
     fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(
             appContext, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
+    fun hasBlePermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            appContext, Manifest.permission.BLUETOOTH_SCAN
+        ) == PackageManager.PERMISSION_GRANTED
+
+    // --- Standalone scan ---
+    fun startScan() {
+        if (!hasBlePermission()) return
+        WearRepository.clearDevices()
+        appContext.startForegroundService(
+            Intent(appContext, WearScanService::class.java)
+        )
+    }
+
+    fun stopScan() {
+        appContext.stopService(Intent(appContext, WearScanService::class.java))
+    }
+
+    // --- Device selection ---
+    fun selectDevice(device: WearBleDevice) { _selectedDevice.value = device }
+    fun clearSelection() { _selectedDevice.value = null }
+
+    // --- Wardrive ---
     fun startWardrive() {
         if (!hasLocationPermission()) return
         appContext.startForegroundService(
@@ -70,6 +99,13 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopWardrive() {
         appContext.stopService(Intent(appContext, WardriveScannerService::class.java))
+    }
+
+    // --- Internals ---
+    private fun pruneAlertMap(nowMs: Long) {
+        if (lastAlertMs.size <= MAX_ALERT_ENTRIES) return
+        val cutoff = nowMs - WearConstants.ALERT_THROTTLE_MS * 4
+        lastAlertMs.entries.removeIf { it.value < cutoff }
     }
 
     private fun vibrateAlert() {
@@ -82,9 +118,7 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
                 @Suppress("DEPRECATION")
                 appContext.getSystemService(Vibrator::class.java)?.vibrate(effect)
             }
-        } catch (e: Exception) {
-            // Haptic is non-critical; swallow silently
-        }
+        } catch (_: Exception) {}
     }
 
     companion object {

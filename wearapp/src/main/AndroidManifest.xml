@@ -34,6 +34,11 @@
         </activity>
 
         <service
+            android:name=".WearScanService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <service
             android:name=".WardriveScannerService"
             android:exported="false"
             android:foregroundServiceType="location|connectedDevice" />
