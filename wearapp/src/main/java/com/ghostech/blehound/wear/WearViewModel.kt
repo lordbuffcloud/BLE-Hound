@@ -1,10 +1,14 @@
 package com.ghostech.blehound.wear
 
+import android.Manifest
 import android.app.Application
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +20,11 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
 
     private val appContext: Application = app
 
-    val summary: StateFlow<BleHoundSummary> = WearRepository.summary
-    val phoneConnected: StateFlow<Boolean> = WearRepository.phoneConnected
+    val summary: StateFlow<BleHoundSummary>          = WearRepository.summary
+    val phoneConnected: StateFlow<Boolean>            = WearRepository.phoneConnected
+    val wardriveActive: StateFlow<Boolean>            = WearRepository.wardriveActive
+    val wardriveHits: StateFlow<Int>                  = WearRepository.wardriveHits
+    val wardriveGpsAvailable: StateFlow<Boolean>      = WearRepository.wardriveGpsAvailable
 
     private val _activeAlert = MutableStateFlow<TrackerAlert?>(null)
     val activeAlert: StateFlow<TrackerAlert?> = _activeAlert.asStateFlow()
@@ -47,6 +54,22 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissAlert() {
         _activeAlert.value = null
+    }
+
+    fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            appContext, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+    fun startWardrive() {
+        if (!hasLocationPermission()) return
+        appContext.startForegroundService(
+            Intent(appContext, WardriveScannerService::class.java)
+        )
+    }
+
+    fun stopWardrive() {
+        appContext.stopService(Intent(appContext, WardriveScannerService::class.java))
     }
 
     private fun vibrateAlert() {

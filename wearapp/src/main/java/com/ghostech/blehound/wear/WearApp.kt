@@ -43,10 +43,13 @@ private val FedGreen = Color(0xFF69F0AE)
 private val CardSurface = Color(0xFF13131C)
 
 @Composable
-fun BleHoundWearApp(vm: WearViewModel) {
+fun BleHoundWearApp(vm: WearViewModel, onWardriveToggle: (Boolean) -> Unit) {
     val summary by vm.summary.collectAsStateWithLifecycle()
     val activeAlert by vm.activeAlert.collectAsStateWithLifecycle()
     val phoneConnected by vm.phoneConnected.collectAsStateWithLifecycle()
+    val wardriveActive by vm.wardriveActive.collectAsStateWithLifecycle()
+    val wardriveHits by vm.wardriveHits.collectAsStateWithLifecycle()
+    val wardriveGpsAvailable by vm.wardriveGpsAvailable.collectAsStateWithLifecycle()
 
     // Keep the last non-null alert alive so the exit animation has content to render.
     val lastAlert = remember { androidx.compose.runtime.mutableStateOf<TrackerAlert?>(null) }
@@ -121,6 +124,14 @@ fun BleHoundWearApp(vm: WearViewModel) {
                         )
                     }
                     item { TotalFooter(total = summary.total) }
+                }
+                item {
+                    WardriveChip(
+                        active       = wardriveActive,
+                        gpsAvailable = wardriveGpsAvailable,
+                        hits         = wardriveHits,
+                        onToggle     = { onWardriveToggle(!wardriveActive) }
+                    )
                 }
             }
         }
@@ -231,6 +242,57 @@ private fun TotalFooter(total: Int) {
         modifier = Modifier
             .fillMaxWidth()
             .semantics { contentDescription = "Total: $total devices in range" }
+    )
+}
+
+private val WardriveLime = Color(0xFF76FF03)
+
+@Composable
+private fun WardriveChip(
+    active: Boolean,
+    gpsAvailable: Boolean,
+    hits: Int,
+    onToggle: () -> Unit
+) {
+    val bg = if (active) Color(0xFF0D1A06) else CardSurface
+    val labelColor = if (active) WardriveLime else Color.LightGray
+    val subText = if (active) {
+        val gpsIcon = if (gpsAvailable) "\u2022 GPS" else "\u25cb GPS"
+        "$gpsIcon  $hits hits"
+    } else {
+        "BLE + GPS logging"
+    }
+    val subColor = when {
+        active && gpsAvailable -> WardriveLime.copy(alpha = 0.70f)
+        active                 -> Color.Gray
+        else                   -> Color.DarkGray
+    }
+    Chip(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = if (active) "Wardrive active, $hits hits" else "Start wardrive"
+            },
+        onClick = onToggle,
+        colors = ChipDefaults.chipColors(
+            backgroundColor = bg,
+            contentColor    = Color.White
+        ),
+        label = {
+            Text(
+                text       = if (active) "Wardrive ON" else "Start Wardrive",
+                color      = labelColor,
+                fontWeight = FontWeight.Bold,
+                fontSize   = 13.sp
+            )
+        },
+        secondaryLabel = {
+            Text(
+                text     = subText,
+                color    = subColor,
+                fontSize = 11.sp
+            )
+        }
     )
 }
 
