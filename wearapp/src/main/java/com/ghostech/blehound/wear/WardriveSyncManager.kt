@@ -69,13 +69,13 @@ internal object WardriveSyncManager {
             Wearable.getNodeClient(context).connectedNodes.await()
         } catch (e: Exception) {
             Log.w(TAG, "No nodes available — re-queuing ${batch.size} hits: ${e.message}")
-            batch.forEach { queue.add(it) }
+            requeueBatch(batch)
             return
         }
 
         if (nodes.isEmpty()) {
             Log.d(TAG, "No connected nodes — re-queuing ${batch.size} hits")
-            batch.forEach { queue.add(it) }
+            requeueBatch(batch)
             return
         }
 
@@ -94,8 +94,14 @@ internal object WardriveSyncManager {
 
         if (!sent) {
             Log.w(TAG, "All nodes failed — re-queuing ${batch.size} hits")
-            batch.forEach { queue.add(it) }
+            requeueBatch(batch)
         }
+    }
+
+    private fun requeueBatch(batch: List<WardriveHit>) {
+        var dropped = 0
+        batch.forEach { if (!queue.offer(it)) dropped++ }
+        if (dropped > 0) Log.w(TAG, "$dropped hits dropped — queue full")
     }
 
     private fun drainQueue(): List<WardriveHit> {

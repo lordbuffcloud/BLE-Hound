@@ -81,7 +81,7 @@ internal object WearRepository {
 
     // caller must ensure scan service is stopped (or about to start) before calling
     fun clearDevices() {
-        _nearbyDevices.value = emptyList()
+        if (_nearbyDevices.value.isNotEmpty()) _nearbyDevices.value = emptyList()
     }
 
     fun resetForTest() {

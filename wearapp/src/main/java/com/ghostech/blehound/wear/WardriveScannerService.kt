@@ -13,8 +13,8 @@ import android.bluetooth.le.ScanSettings
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.HandlerThread
 import android.os.IBinder
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -28,8 +28,9 @@ import com.google.android.gms.location.Priority
 class WardriveScannerService : Service() {
 
     private lateinit var fusedLocation: FusedLocationProviderClient
-    private var currentLocation: Location? = null
+    @Volatile private var currentLocation: Location? = null
     private var bleScanner: android.bluetooth.le.BluetoothLeScanner? = null
+    private val locationThread = HandlerThread("wardrive-location")
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -63,6 +64,7 @@ class WardriveScannerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        locationThread.start()
         fusedLocation = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
     }
@@ -81,6 +83,7 @@ class WardriveScannerService : Service() {
         super.onDestroy()
         stopBleScan()
         fusedLocation.removeLocationUpdates(locationCallback)
+        locationThread.quitSafely()
         WardriveSyncManager.stop(this)
         WearRepository.updateWardriveActive(false)
         WearRepository.updateWardriveGpsAvailable(false)
@@ -104,7 +107,7 @@ class WardriveScannerService : Service() {
             .setMinUpdateIntervalMillis(1_000L)
             .build()
 
-        fusedLocation.requestLocationUpdates(req, locationCallback, Looper.getMainLooper())
+        fusedLocation.requestLocationUpdates(req, locationCallback, locationThread.looper)
     }
 
     private fun startBleScan() {
@@ -120,7 +123,8 @@ class WardriveScannerService : Service() {
         ) == PackageManager.PERMISSION_GRANTED
 
         if (!hasScan) {
-            Log.w(TAG, "Missing BLUETOOTH_SCAN")
+            Log.w(TAG, "Missing BLUETOOTH_SCAN — stopping")
+            stopSelf()
             return
         }
 

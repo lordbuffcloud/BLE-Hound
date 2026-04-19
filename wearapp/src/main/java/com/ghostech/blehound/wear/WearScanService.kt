@@ -44,7 +44,8 @@ class WearScanService : Service() {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.w(TAG, "BLE scan failed: $errorCode")
+            Log.w(TAG, "BLE scan failed: $errorCode — stopping service")
+            stopSelf()
         }
     }
 
@@ -55,6 +56,7 @@ class WearScanService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIF_ID, buildNotification())
+        WearRepository.clearDevices()
         startBleScan()
         WearRepository.updateScanActive(true)
         timeoutJob = serviceScope.launch {
