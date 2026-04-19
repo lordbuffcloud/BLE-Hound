@@ -74,6 +74,10 @@
 
             <service android:name=".BleMonitorService" android:exported="false" android:foregroundServiceType="connectedDevice" />
 
+        <activity
+            android:name=".WardriveSettingsActivity"
+            android:exported="false" />
+
         <service
             android:name=".WardriveReceiver"
             android:exported="true">

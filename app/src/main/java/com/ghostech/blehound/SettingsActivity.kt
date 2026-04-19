@@ -85,6 +85,12 @@ class SettingsActivity : Activity() {
         }
         content.addView(offensiveButton)
 
+        val wardriveButton = buildHellButton("WARDRIVE / WIGLE")
+        wardriveButton.setOnClickListener {
+            startActivity(Intent(this, WardriveSettingsActivity::class.java))
+        }
+        content.addView(wardriveButton)
+
         val aboutButton = buildHellButton("ABOUT")
         aboutButton.setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java))

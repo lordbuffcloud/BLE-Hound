@@ -4,6 +4,11 @@ import android.os.Environment
 import android.util.Log
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.io.File
 import java.text.SimpleDateFormat
@@ -12,36 +17,55 @@ import java.util.Locale
 
 class WardriveReceiver : WearableListenerService() {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
+    }
+
     override fun onMessageReceived(event: MessageEvent) {
         if (event.path != PATH_WARDRIVE_BATCH) return
         val hits = decodeBatch(event.data)
         if (hits.isEmpty()) return
-        appendWigleCsv(hits)
+
+        val csvRows = buildCsvRows(hits)
+        appendWigleCsv(csvRows)
         Log.i(TAG, "Appended ${hits.size} wardrive hits to CSV")
+
+        scope.launch {
+            if (WigleUploader.hasCredentials(this@WardriveReceiver)) {
+                val ok = WigleUploader.upload(this@WardriveReceiver, csvRows)
+                Log.i(TAG, "WiGLE upload: ${if (ok) "success" else "failed"}")
+            }
+        }
     }
 
-    private fun appendWigleCsv(hits: List<HitRecord>) {
-        val dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
-            ?: filesDir
+    private fun buildCsvRows(hits: List<HitRecord>): String = buildString {
+        hits.forEach { h ->
+            val time = DATE_FMT.format(Date(h.timestampMs))
+            append(h.mac).append(',')
+            append(h.name.replace(',', '_')).append(',')
+            append("").append(',')
+            append(time).append(',')
+            append(-1).append(',')
+            append(h.rssi).append(',')
+            append(h.lat).append(',')
+            append(h.lon).append(',')
+            append(h.altMeters).append(',')
+            append(h.accuracyMeters).append(',')
+            appendLine(if (h.deviceClass.isNotBlank()) h.deviceClass else "BLE")
+        }
+    }
+
+    private fun appendWigleCsv(csvRows: String) {
+        val dir = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: filesDir
         dir.mkdirs()
         val file = File(dir, CSV_FILENAME)
         val isNew = !file.exists()
         file.appendText(buildString {
             if (isNew) appendLine(WIGLE_HEADER)
-            hits.forEach { h ->
-                val time = DATE_FMT.format(Date(h.timestampMs))
-                append(h.mac).append(',')
-                append(h.name.replace(',', '_')).append(',')
-                append("").append(',')
-                append(time).append(',')
-                append(-1).append(',')
-                append(h.rssi).append(',')
-                append(h.lat).append(',')
-                append(h.lon).append(',')
-                append(h.altMeters).append(',')
-                append(h.accuracyMeters).append(',')
-                appendLine(if (h.deviceClass.isNotBlank()) h.deviceClass else "BLE")
-            }
+            append(csvRows)
         })
         Log.d(TAG, "CSV path: ${file.absolutePath}")
     }
@@ -67,15 +91,15 @@ class WardriveReceiver : WearableListenerService() {
                 val mac = o.optString("mac", "")
                 if (mac.isBlank()) return@mapNotNull null
                 HitRecord(
-                    mac           = mac,
-                    name          = o.optString("name", ""),
-                    rssi          = o.optInt("rssi", -99).coerceIn(-120, 0),
-                    lat           = o.optDouble("lat", 0.0),
-                    lon           = o.optDouble("lon", 0.0),
-                    altMeters     = o.optDouble("alt", 0.0),
+                    mac            = mac,
+                    name           = o.optString("name", ""),
+                    rssi           = o.optInt("rssi", -99).coerceIn(-120, 0),
+                    lat            = o.optDouble("lat", 0.0),
+                    lon            = o.optDouble("lon", 0.0),
+                    altMeters      = o.optDouble("alt", 0.0),
                     accuracyMeters = o.optDouble("acc", 0.0).toFloat(),
-                    timestampMs   = o.optLong("ts", 0L),
-                    deviceClass   = o.optString("cls", "")
+                    timestampMs    = o.optLong("ts", 0L),
+                    deviceClass    = o.optString("cls", "")
                 )
             }
         } catch (e: Exception) {
@@ -85,10 +109,10 @@ class WardriveReceiver : WearableListenerService() {
     }
 
     companion object {
-        private const val TAG                = "WardriveReceiver"
+        private const val TAG                 = "WardriveReceiver"
         private const val PATH_WARDRIVE_BATCH = "/ble-hound/wardrive-batch"
-        private const val CSV_FILENAME       = "blehound-wardrive.csv"
-        private const val WIGLE_HEADER       =
+        private const val CSV_FILENAME        = "blehound-wardrive.csv"
+        private const val WIGLE_HEADER        =
             "MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,Type"
         private val DATE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
     }
