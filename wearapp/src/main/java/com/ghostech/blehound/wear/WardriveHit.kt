@@ -1,5 +1,6 @@
 package com.ghostech.blehound.wear
 
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -23,20 +24,33 @@ internal object WardriveCodec {
     private val dateFmt: DateTimeFormatter =
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
 
+    private const val TAG = "WardriveCodec"
+    private const val MAX_PAYLOAD_BYTES = 80_000
+
     fun encodeHits(hits: List<WardriveHit>): ByteArray {
         val arr = JSONArray()
-        hits.forEach { h ->
-            arr.put(JSONObject().apply {
-                put("mac",      h.mac)
-                put("name",     h.name)
-                put("rssi",     h.rssi.coerceIn(-120, 0))
-                put("lat",      h.lat)
-                put("lon",      h.lon)
-                put("alt",      h.altMeters)
-                put("acc",      h.accuracyMeters.toDouble())
-                put("ts",       h.timestampMs)
-                put("cls",      h.deviceClass)
-            })
+        var byteEstimate = 2 // opening/closing brackets
+        var included = 0
+        for (h in hits) {
+            val obj = JSONObject().apply {
+                put("mac",  h.mac)
+                put("name", h.name)
+                put("rssi", h.rssi.coerceIn(-120, 0))
+                put("lat",  h.lat)
+                put("lon",  h.lon)
+                put("alt",  h.altMeters)
+                put("acc",  h.accuracyMeters.toDouble())
+                put("ts",   h.timestampMs)
+                put("cls",  h.deviceClass)
+            }
+            val itemBytes = obj.toString().length + 1 // +1 for comma; ASCII-dominant data, length ≈ byte count
+            if (byteEstimate + itemBytes > MAX_PAYLOAD_BYTES) {
+                Log.w(TAG, "${hits.size - included} hits dropped — payload would exceed $MAX_PAYLOAD_BYTES bytes")
+                break
+            }
+            arr.put(obj)
+            byteEstimate += itemBytes
+            included++
         }
         return arr.toString().toByteArray(Charsets.UTF_8)
     }

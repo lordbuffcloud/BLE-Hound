@@ -5,8 +5,8 @@ data class WearBleDevice(
     val name: String,
     val rssi: Int,
     val deviceClass: String = "",
-    val firstSeenMs: Long = System.currentTimeMillis(),
-    val lastSeenMs: Long = System.currentTimeMillis()
+    val firstSeenMs: Long = 0L,
+    val lastSeenMs: Long = 0L
 ) {
     val rssiLabel: String get() = when {
         rssi >= -60 -> "Excellent"

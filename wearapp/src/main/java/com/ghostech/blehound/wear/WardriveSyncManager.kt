@@ -25,22 +25,26 @@ internal object WardriveSyncManager {
 
     private val scope   = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
+    private var appContext: Context? = null
 
     fun start(context: Context) {
         if (syncJob?.isActive == true) return
+        appContext = context.applicationContext
+        hitCount.set(0)
         syncJob = scope.launch {
             while (isActive) {
                 delay(BATCH_INTERVAL_MS)
-                flush(context)
+                flush(appContext ?: return@launch)
             }
         }
         Log.d(TAG, "Sync loop started")
     }
 
-    fun stop(context: Context) {
+    fun stop() {
         syncJob?.cancel()
         syncJob = null
-        scope.launch { flush(context) }
+        val ctx = appContext ?: return
+        scope.launch { flush(ctx) }
         Log.d(TAG, "Sync loop stopped, final flush queued")
     }
 

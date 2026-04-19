@@ -84,7 +84,7 @@ class WardriveScannerService : Service() {
         stopBleScan()
         fusedLocation.removeLocationUpdates(locationCallback)
         locationThread.quitSafely()
-        WardriveSyncManager.stop(this)
+        WardriveSyncManager.stop()
         WearRepository.updateWardriveActive(false)
         WearRepository.updateWardriveGpsAvailable(false)
         Log.d(TAG, "Wardrive stopped")

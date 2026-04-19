@@ -43,10 +43,7 @@ internal object DataParser {
         }
     }
 
-    fun parseSummary(
-        bytes: ByteArray,
-        nowMs: Long = System.currentTimeMillis()
-    ): ParseResult<BleHoundSummary> = parseBytes(bytes) { json ->
+    fun parseSummary(bytes: ByteArray): ParseResult<BleHoundSummary> = parseBytes(bytes) { json ->
         ParseResult.Success(
             BleHoundSummary(
                 total = json.optInt("total", 0).coerceAtLeast(0),
@@ -55,15 +52,12 @@ internal object DataParser {
                 gadgets = json.optInt("gadgets", 0).coerceAtLeast(0),
                 feds = json.optInt("feds", 0).coerceAtLeast(0),
                 isScanning = json.optBoolean("scanning", false),
-                receivedAtMs = nowMs
+                receivedAtMs = System.currentTimeMillis()
             )
         )
     }
 
-    fun parseAlert(
-        bytes: ByteArray,
-        nowMs: Long = System.currentTimeMillis()
-    ): ParseResult<TrackerAlert> = parseBytes(bytes) { json ->
+    fun parseAlert(bytes: ByteArray): ParseResult<TrackerAlert> = parseBytes(bytes) { json ->
         val deviceClass = json.optString("class", "").trim()
         if (deviceClass.isBlank()) return@parseBytes ParseResult.Failure("Missing device class")
         val address = json.optString("address", "").trim()
@@ -73,7 +67,7 @@ internal object DataParser {
                 deviceClass = deviceClass,
                 address = address,
                 rssi = json.optInt("rssi", -99).coerceIn(-120, 0),
-                receivedAtMs = nowMs
+                receivedAtMs = System.currentTimeMillis()
             )
         )
     }

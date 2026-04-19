@@ -33,7 +33,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
-import kotlinx.coroutines.delay
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.MaterialTheme
@@ -43,6 +42,7 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import androidx.wear.compose.material.Vignette
 import androidx.wear.compose.material.VignettePosition
+import kotlinx.coroutines.delay
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,9 @@ fun BleHoundWearApp(
 
     val activeAlert       by vm.activeAlert.collectAsStateWithLifecycle()
     val lastAlert = remember { mutableStateOf<TrackerAlert?>(null) }
-    if (activeAlert != null) lastAlert.value = activeAlert
+    LaunchedEffect(activeAlert) {
+        if (activeAlert != null) lastAlert.value = activeAlert
+    }
 
     BackHandler(enabled = screen != WearScreen.MAIN) {
         screen = when (screen) {

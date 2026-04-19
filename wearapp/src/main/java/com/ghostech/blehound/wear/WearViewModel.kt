@@ -75,7 +75,6 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
     // --- Standalone scan ---
     fun startScan() {
         if (!hasBlePermission()) return
-        WearRepository.clearDevices()
         appContext.startForegroundService(
             Intent(appContext, WearScanService::class.java)
         )
@@ -118,10 +117,13 @@ class WearViewModel(app: Application) : AndroidViewModel(app) {
                 @Suppress("DEPRECATION")
                 appContext.getSystemService(Vibrator::class.java)?.vibrate(effect)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Vibration failed: ${e.message}")
+        }
     }
 
     companion object {
+        private const val TAG = "WearViewModel"
         private val VIBRATION_PATTERN = longArrayOf(0, 150, 100, 150)
         private const val MAX_ALERT_ENTRIES = 512
     }
