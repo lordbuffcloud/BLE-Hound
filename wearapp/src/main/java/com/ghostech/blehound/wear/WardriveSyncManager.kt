@@ -11,7 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 internal object WardriveSyncManager {
@@ -20,7 +20,7 @@ internal object WardriveSyncManager {
     private const val BATCH_INTERVAL_MS = 30_000L
     private const val MAX_QUEUE_SIZE    = 2_000
 
-    private val queue    = ConcurrentLinkedQueue<WardriveHit>()
+    private val queue    = ArrayBlockingQueue<WardriveHit>(MAX_QUEUE_SIZE)
     private val hitCount = AtomicInteger(0)
 
     private val scope   = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -45,10 +45,10 @@ internal object WardriveSyncManager {
     }
 
     fun addHit(hit: WardriveHit) {
-        if (queue.size >= MAX_QUEUE_SIZE) {
+        if (!queue.offer(hit)) {
             queue.poll()
+            queue.offer(hit)
         }
-        queue.add(hit)
         WearRepository.incrementWardriveHits(hitCount.incrementAndGet())
     }
 

@@ -16,9 +16,9 @@ data class WearBleDevice(
     }
 
     val rssiDot: String get() = when {
-        rssi >= -60 -> "\u25CF"  // filled circle — strong
-        rssi >= -75 -> "\u25CF"
-        rssi >= -90 -> "\u25D4"  // circle with lower-right quarter black — medium
+        rssi >= -60 -> "\u25CF"  // filled circle — excellent
+        rssi >= -75 -> "\u25D4"  // 3/4 filled circle — good
+        rssi >= -90 -> "\u25D1"  // half-filled circle — fair
         else        -> "\u25CB"  // empty circle — weak
     }
 

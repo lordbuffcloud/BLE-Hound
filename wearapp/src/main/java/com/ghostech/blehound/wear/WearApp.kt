@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -271,16 +274,24 @@ private fun DeviceDetailScreen(
     val device by vm.selectedDevice.collectAsStateWithLifecycle()
     val listState = rememberScalingLazyListState()
 
+    LaunchedEffect(device == null) {
+        if (device == null) onBack()
+    }
+
     Scaffold(
         timeText          = { TimeText() },
         vignette          = { Vignette(vignettePosition = VignettePosition.TopAndBottom) },
         positionIndicator = { PositionIndicator(scalingLazyListState = listState) }
     ) {
-        if (device == null) {
-            onBack()
-            return@Scaffold
+        val d = device ?: return@Scaffold
+
+        var nowMs by remember(d.mac) { mutableLongStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(d.mac) {
+            while (true) {
+                delay(1_000)
+                nowMs = System.currentTimeMillis()
+            }
         }
-        val d = device!!
 
         ScalingLazyColumn(
             state             = listState,
@@ -308,7 +319,6 @@ private fun DeviceDetailScreen(
                 item { DetailRow(label = "CLASS", value = d.deviceClass, accent = classColor(d.deviceClass)) }
             }
 
-            val nowMs = System.currentTimeMillis()
             item { DetailRow(label = "FIRST",  value = "${elapsedLabel(nowMs - d.firstSeenMs)} ago") }
             item { DetailRow(label = "LAST",   value = "${elapsedLabel(nowMs - d.lastSeenMs)} ago") }
 
@@ -596,7 +606,8 @@ private fun classColor(cls: String): Color = when {
 }
 
 private fun elapsedLabel(ms: Long): String = when {
-    ms < 60_000L                   -> "${ms / 1000}s"
-    ms < 3_600_000L                -> "${ms / 60_000}m"
-    else                           -> "${ms / 3_600_000}h"
+    ms <= 0L        -> "just now"
+    ms < 60_000L    -> "${ms / 1000}s"
+    ms < 3_600_000L -> "${ms / 60_000}m"
+    else            -> "${ms / 3_600_000}h"
 }

@@ -15,10 +15,20 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class WearScanService : Service() {
 
     private var bleScanner: android.bluetooth.le.BluetoothLeScanner? = null
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var timeoutJob: Job? = null
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -47,12 +57,18 @@ class WearScanService : Service() {
         startForeground(NOTIF_ID, buildNotification())
         startBleScan()
         WearRepository.updateScanActive(true)
+        timeoutJob = serviceScope.launch {
+            delay(SCAN_TIMEOUT_MS)
+            Log.d(TAG, "Scan timeout (${SCAN_TIMEOUT_MS / 60_000}m) — auto-stopping")
+            stopSelf()
+        }
         Log.d(TAG, "Standalone scan started")
         return START_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        serviceScope.cancel()
         stopBleScan()
         WearRepository.updateScanActive(false)
         Log.d(TAG, "Standalone scan stopped")
@@ -117,8 +133,9 @@ class WearScanService : Service() {
             .build()
 
     companion object {
-        private const val TAG        = "WearScanService"
-        private const val NOTIF_ID   = 7422
-        private const val CHANNEL_ID = "houndbee_scan"
+        private const val TAG             = "WearScanService"
+        private const val NOTIF_ID        = 7422
+        private const val CHANNEL_ID      = "houndbee_scan"
+        private const val SCAN_TIMEOUT_MS = 5 * 60 * 1_000L
     }
 }

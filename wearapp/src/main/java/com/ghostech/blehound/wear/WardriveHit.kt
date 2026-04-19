@@ -2,9 +2,9 @@ package com.ghostech.blehound.wear
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 data class WardriveHit(
     val mac: String,
@@ -20,7 +20,8 @@ data class WardriveHit(
 
 internal object WardriveCodec {
 
-    private val dateFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    private val dateFmt: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
 
     fun encodeHits(hits: List<WardriveHit>): ByteArray {
         val arr = JSONArray()
@@ -65,7 +66,7 @@ internal object WardriveCodec {
 
     fun toWigleCsvRows(hits: List<WardriveHit>): String = buildString {
         hits.forEach { h ->
-            val time = dateFmt.format(Date(h.timestampMs))
+            val time = dateFmt.format(Instant.ofEpochMilli(h.timestampMs))
             append(h.mac).append(',')
             append(h.name.replace(',', '_')).append(',')
             append("").append(',')                      // AuthMode — not applicable for BLE

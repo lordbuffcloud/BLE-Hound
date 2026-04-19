@@ -79,9 +79,9 @@ internal object WearRepository {
         _nearbyDevices.value.firstOrNull { it.mac == mac }?.firstSeenMs
             ?: System.currentTimeMillis()
 
+    // caller must ensure scan service is stopped (or about to start) before calling
     fun clearDevices() {
         _nearbyDevices.value = emptyList()
-        _scanActive.value = false
     }
 
     fun resetForTest() {

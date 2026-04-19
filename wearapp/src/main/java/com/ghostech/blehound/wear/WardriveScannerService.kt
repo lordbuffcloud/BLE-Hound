@@ -33,8 +33,10 @@ class WardriveScannerService : Service() {
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
-            currentLocation = result.lastLocation
-            WearRepository.updateWardriveGpsAvailable(true)
+            result.lastLocation?.let { loc ->
+                currentLocation = loc
+                WearRepository.updateWardriveGpsAvailable(true)
+            }
         }
     }
 
@@ -156,7 +158,7 @@ class WardriveScannerService : Service() {
     private fun buildNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("BLE Hound Wardriving")
+            .setContentTitle("houndBEE Wardrive")
             .setContentText("Scanning BLE + GPS…")
             .setOngoing(true)
             .build()
